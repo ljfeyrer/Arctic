@@ -1,3 +1,8 @@
 .Rproj.user/**
-
+FIGS/**
 .Rproj.user/0413310F/sources/prop/8AC47D27
+data/**
+shapes/**
+.DS_Store
+.gitattributes
+Arctic.Rproj
