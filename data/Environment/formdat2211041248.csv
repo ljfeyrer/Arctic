@@ -1,0 +1,5 @@
+"DateT","Pos","Wind_dir","Windspeed_ms","Wave_ht_m","Swell_ht_m","Air_temp_C","Vis","Cloud_cover_pct","fishing","Vessel_SOG","Comments"
+2022-11-04 12:48:00,"67d27.4665N 60d38.6841W","WNW",10.7,0.75,1,-6,10,100,"trawling",2.7,"tried since 12:28 to log enironment but matlab crashes"
+2022-11-04 14:46:00,"67d27.2214N 61d0.9589W","W",5.5,0.25,1,-6,10,90,"transit",10.2,"transit to shallow station"
+2022-11-04 15:40:00,"67d28.2256N 61d23.1567W","W",7.3,1,1.5,-8,15,75,"transit",9.7,"na"
+2022-11-04 17:50:00,"67d32.1238N 61d55.9573W","WSW",7,0.5,2.5,-7,15,30,"trawling",3,"na"

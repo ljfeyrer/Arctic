@@ -1,0 +1,421 @@
+#clean 2016 PAM and Chart files and merge PAM
+#updated Dec 10, 2019
+#libraries-----------
+library(stringr)
+library(readr)
+library(data.table)
+library(dplyr)
+library(lubridate)
+library(openxlsx)
+library(zoo)
+
+
+
+#
+#2015------------
+
+
+#Local Time data 
+# Data 1
+DataLT1 <- read_csv("U:/GIS/Detection_mapping/GPS/2015/Originals/Chart/RAW/LocalT/2015DataforLaura_55_1.csv")
+chart_2015.LT1 = ChartClean2015(DataLT1)
+
+# Data 2
+DataLT2 <- read_csv("U:/GIS/Detection_mapping/GPS/2015/Originals/Chart/RAW/LocalT/june2015chartrecorddata.csv")
+chart_2015.LT2 = ChartClean2015(DataLT2)
+
+#combine
+chart_2015.LT = rbind(chart_2015.LT1, chart_2015.LT2)
+#create UTC + 3hours to local time
+chart_2015.LT = chart_2015.LT%>%mutate(UTC = DateT +10800)
+
+
+#GMT+4 data
+path <- "U:/GIS/Detection_mapping/GPS/2015/Originals/Chart/RAW/GMT4"
+DF <- multmerge_v1(path)
+summary(DF)
+chart_2015.gmt4 = ChartClean(DF)
+
+#create UTC 
+#4 hours behind local time + 3 hrs for UTC
+chart_2015.gmt4 = chart_2015.gmt4%>%mutate(UTC = DateT +14400 +10800)
+
+#put 2015 together
+
+      chart_2015.GPS = rbind(chart_2015.gmt4, chart_2015.LT)
+      summary(chart_2015.GPS)
+      chart_2015.GPS <- unique( chart_2015.GPS, by = "UTC")
+      chart_2015.GPS<-as.data.table(chart_2015.GPS)
+      setkey(chart_2015.GPS, UTC)
+      setindex(chart_2015.GPS, UTC)
+      chart_2015.GPS<- as.data.frame(chart_2015.GPS, na.rm = T)
+      chart_2015.GPS$UTC1 =  as.character(chart_2015.GPS$UTC)
+
+anyDuplicated(chart_2015.GPS$UTC1)
+
+chart_2015.GPS = chart_2015.GPS[!duplicated(chart_2015.GPS$UTC), ]
+
+#write file to see if it worked
+write.csv(chart_2015.GPS, file = "U:/GIS/Detection_mapping/GPS/2015/Chart_2015.csv", row.names = FALSE)
+
+
+##interpolation across gaps in chart----------
+
+Interp2015 = interpGPS(chart_2015.GPS)
+
+  #get number of days
+   Interp2015D = Interp2015%>%group_by(Date)%>%summarise(n = n())%>%mutate(date = as.Date(Date))
+                
+ write.csv(Interp2015, file = "U:/GIS/Detection_mapping/GPS/2015/Chart_2015_I.csv", row.names = FALSE)
+
+
+#2016------------
+
+#2016PAM--------
+path <- "U:/GIS/Detection_mapping/GPS/2016/Originals/PAM_CSV"
+DF <- multmerge(path)
+summary(DF)
+PAM_2016 = ChartCleanPAM2016(DF)
+summary(PAM_2016)
+
+#deduplicate
+PAM_2016 = PAM_2016[!duplicated(PAM_2016$DateT), ]
+#time IS UTC in this case, phew!
+PAM_2016 = PAM_2016%>%mutate(UTC = DateT)
+write.csv(PAM_2016, file = "U:/GIS/Detection_mapping/GPS/2016/PAM_2016.csv", row.names = FALSE)
+
+
+#interpolate time between points to fill gaps when PAM GPS was unplugged-----------------
+        
+        full.time    <- with(PAM_2016,seq(UTC[1],UTC[length(UTC)],by=60))
+        summary(full.time)
+        test =full.time
+        
+        #intrpolate the coordinates in between missing time stamps
+        PAM_2016 = as.data.frame(PAM_2016)
+        df.zoo <- zoo(PAM_2016[,4:5],PAM_2016$UTC)        # convert to zoo object
+        result <- na.approx(df.zoo,xout=test)  # interpolate; result is also a zoo object
+        head(result)
+        Interp2016 = fortify.zoo(result, name = "UTC")
+        
+        summary(Interp2016)
+        
+        #add date field
+        Interp2016 = Interp2016%>% mutate( Date = as.Date(as.character(Interp2016$UTC),tz = UTC, format="%Y-%m-%d"))
+        
+        #but some dates don't make sense where we were in port, etc. so remove list id'd in GIS
+        notPam = as.POSIXct(c("2016-06-15", "2016-06-17", "2016-06-18", "2016-06-29", "2016-07-12", "2016-07-13"))
+        notPam =as.data.frame(notPam)
+        notPam =notPam%>%rename(Date = notPam)
+        PAM_2016= PAM_2016[!(as.character(PAM_2016$Date) %in% as.character(notPam$Date)), ]
+        
+        Interp2016D= Interp2016[(as.character(Interp2016$Date) %in% as.character(PAM_2016$Date)), ]
+
+
+write.csv(Interp2016D, file = "U:/GIS/Detection_mapping/GPS/2016/PAM_2016_I.csv", row.names = FALSE)
+
+
+#2016 chart-----------
+
+#this data apears to be quite offset from PAM by about 20mins :(
+# Time is local checked against LOG
+path <- "U:/GIS/Detection_mapping/GPS/2016/Originals/CHART_csv"
+DF <- multmerge(path)
+
+chart_2016 = ChartClean(DF)
+#create UTC + 3hours to local time
+chart_2016 = chart_2016%>%mutate(UTC = DateT +10800)
+
+#Index to make order right
+
+chart_2016<-as.data.table(chart_2016)
+setkey(chart_2016, UTC)
+setindex(chart_2016, UTC)
+chart_2016 = as.data.frame(chart_2016)
+
+chart_2016 = chart_2016[!duplicated(chart_2016$UTC), ]
+
+
+write.csv(chart_2016, file = "U:/GIS/Detection_mapping/GPS/2016/Chart_2016.csv", row.names = FALSE)
+
+
+##interpolation across gaps in chart----------
+
+full.time    <- with(chart_2016,seq(UTC[1],UTC[length(UTC)],by=60))
+summary(full.time)
+test =full.time
+
+#intrpolate the coordinates in between missing time stamps
+Chart_2016 = as.data.frame(chart_2016)
+df.zoo <- zoo(Chart_2016[,4:5],Chart_2016$UTC)        # convert to zoo object
+result <- na.approx(df.zoo,xout=test)  # interpolate; result is also a zoo object
+head(result)
+Interp2016 = fortify.zoo(result, name = "UTC")
+
+summary(Interp2016)
+
+#add date field
+Interp2016 = Interp2016%>% mutate( Date = as.Date(as.character(Interp2016$UTC),tz = UTC, format="%Y-%m-%d"))
+
+#get number of days
+Chart_2016D = Chart_2016%>%group_by(Date)%>%summarise(n = n())%>%mutate(date = as.Date(Date))
+
+#but some dates don't make sense where we were in port, etc. so remove list id'd in GIS
+
+Interp2016D= Interp2016[(as.character(Interp2016$Date) %in% as.character(Chart_2016D$Date)), ]
+
+write.csv(Interp2016D, file = "U:/GIS/Detection_mapping/GPS/2016/Chart_2016_I.csv", row.names = FALSE)
+
+
+
+#2017------------
+ChartClean2017 = function(DF){
+  DF = as.data.frame(DF)
+  #remove dups
+  deduped.data <- unique(DF, by = DATE_UTC)
+  deduped.data$TIME = deduped.data$DATE_UTC_2
+  
+  #clean for where chart has data
+  chart_2015.GPS<-subset(deduped.data, select=c("TIME", "Lat.", "Long."))
+  chart_2015.GPS<-chart_2015.GPS[complete.cases(chart_2015.GPS), ]
+  chart_2015.GPS = chart_2015.GPS%>%filter(Long.< 0)
+  chart_2015.GPS$Date<-as.POSIXct((chart_2015.GPS$TIME), format = "_%b-%d-%Y", TZ = "UTC")
+  
+  #3 date formats in the same variable :)
+  chart_2015.GPS$DateT<-parse_date_time(chart_2015.GPS$TIME, 
+                                        c("%b-%d-%Y %H:%M:%S", "%m/%d/%Y %H:%M","%m/%d/%Y %I:%M:%S% p", 
+                                          "%Y-%m-%d %H:%M:%S", "_%b-%d-%Y %H:%M:%S" ))
+  #chart ID = 3
+  chart_2015.GPS$ID <- 3
+  chart_2015.GPS<- chart_2015.GPS%>%select(ID, TIME, DateT, Latitude = Lat., Longitude = Long.)
+  chart_2015.GPS$Date = as.POSIXct(as.character(chart_2015.GPS$DateT), format="%Y-%m-%d", TZ = "UTC")
+  chart_2015.GPS =chart_2015.GPS
+  
+}
+
+#PAM----------
+CleanPAM2017 = function(DF){
+  DF = as.data.frame(DF)
+
+  #remove dups
+  deduped.data <- unique(DF, by = UTC)
+  deduped.data$TIME = deduped.data$UTC
+  
+  #clean for where chart has data
+  chart_2015.GPS<-subset(deduped.data, select=c("TIME", "Latitude", "Longitude"))
+  chart_2015.GPS<-chart_2015.GPS[complete.cases(chart_2015.GPS), ]
+  chart_2015.GPS = chart_2015.GPS%>%filter(Longitude< 0)
+  chart_2015.GPS$Date<-as.POSIXct((chart_2015.GPS$TIME), format="%b-%d-%Y", TZ = "UTC")
+  
+  #3 date formats in the same variable :)
+  chart_2015.GPS$DateT<-parse_date_time(chart_2015.GPS$TIME, 
+                                        c("%b-%d-%Y %H:%M:%S", "%m/%d/%Y %H:%M","%m/%d/%Y %I:%M:%S% p", "%Y-%m-%d %H:%M:%S" ))
+  
+  #chart ID = 3
+  chart_2015.GPS$ID <- 4
+  chart_2015.GPS<- chart_2015.GPS%>%select(ID, TIME, DateT, Latitude , Longitude )
+  chart_2015.GPS$Date = as.POSIXct(as.character(chart_2015.GPS$DateT), format="%Y-%m-%d", TZ = "UTC")
+  
+  #Index to make order right
+  chart_2015.GPS<-as.data.table(chart_2015.GPS)
+  setkey(chart_2015.GPS, DateT)
+  setindex(chart_2015.GPS, DateT)
+  chart_2015.GPS<- as.data.frame(chart_2015.GPS)
+  chart_2015.GPS =chart_2015.GPS
+  
+}
+path <- "U://GIS/Detection_mapping/GPS/2017/Originals/PAM_CSV"
+DF <- multmerge(path)
+PAM_2017 = CleanPAM2017(DF)
+summary(PAM_2017)
+
+#deduplicate
+PAM_2017 = PAM_2017[!duplicated(PAM_2017$DateT), ]
+#time IS UTC in this case, phew!
+PAM_2017 = PAM_2017%>%mutate(UTC = DateT)
+
+#but some dates don't make sense where we were in port, etc. so remove list id'd in GIS
+notPam = as.POSIXct(c("2017-06-07", "2017-06-30"))
+notPam =as.data.frame(notPam)
+notPam =notPam%>%rename(Date = notPam)
+
+PAM_2017= PAM_2017[!(as.character(PAM_2017$Date) %in% as.character(notPam$Date)), ]
+summary(PAM_2017)
+
+write.csv(PAM_2017, file = "U:/GIS/Detection_mapping/GPS/2017/PAM_2017.csv", row.names = FALSE)
+
+
+#chart-----------
+
+DF <- read_csv("U:/GIS/Detection_mapping/GPS/2017/Originals/CHART/GPS_2017.csv")
+
+chart_2017 = ChartClean2017(DF)
+#create UTC + 3hours to local time
+chart_2017 = chart_2017%>%mutate(UTC = DateT +10800)
+
+#Index to make order right
+
+chart_2017<-as.data.table(chart_2017)
+setkey(chart_2017, UTC)
+setindex(chart_2017, UTC)
+chart_2017 = as.data.frame(chart_2017)
+
+chart_2017 = chart_2017[!duplicated(chart_2017$UTC), ]
+
+
+write.csv(chart_2017, file = "U:/GIS/Detection_mapping/GPS/2017/Chart_2017.csv", row.names = FALSE)
+
+
+##interpolation across gaps in chart----------
+
+
+full.time    <- with(chart_2017,seq(UTC[1],UTC[length(UTC)],by=60))
+summary(full.time)
+test =full.time
+
+#intrpolate the coordinates in between missing time stamps
+Chart_2017 = as.data.frame(chart_2017)
+df.zoo <- zoo(Chart_2017[,4:5],Chart_2017$UTC)        # convert to zoo object
+result <- na.approx(df.zoo,xout=test)  # interpolate; result is also a zoo object
+head(result)
+Interp2017 = fortify.zoo(result, name = "UTC")
+
+summary(Interp2017)
+
+#add date field
+Interp2017 = Interp2017%>% mutate( Date = as.Date(as.character(Interp2017$UTC),tz = UTC, format="%Y-%m-%d"))
+
+#get number of days
+Chart_2017D = Chart_2017%>%group_by(Date)%>%summarise(n = n())%>%mutate(date = as.Date(Date))
+
+#but some dates don't make sense where we were in port, etc. so remove list id'd in GIS
+
+Interp2017D= Interp2017[(as.character(Interp2017$Date) %in% as.character(Chart_2017D$Date)), ]
+
+write.csv(Interp2017D, file = "U:/GIS/Detection_mapping/GPS/2017/Chart_2017_I.csv", row.names = FALSE)
+
+
+#2019---------------
+
+
+#chart-----------
+
+DF <- read_csv("U:/GIS/Detection_mapping/GPS/2019/Originals/CHART/GPS_2019.csv")
+
+chart_2019 = ChartClean(DF)
+#create UTC + 3hours to local time
+chart_2019 = chart_2019%>%mutate(UTC = DateT +10800)
+
+#Index to make order right
+
+chart_2019<-as.data.table(chart_2019)
+setkey(chart_2019, UTC)
+setindex(chart_2019, UTC)
+chart_2019 = as.data.frame(chart_2019)
+
+chart_2019 = chart_2019[!duplicated(chart_2019$UTC), ]
+chart_2019$UTC1<-round_date(chart_2019$UTC, unit="1 minutes")
+chart_2019_1m = chart_2019[!duplicated(chart_2019$UTC1), ]
+
+write.csv(chart_2019_1m, file = "U:/GIS/Detection_mapping/GPS/2019/Chart_2019.csv", row.names = FALSE)
+
+
+#PAM----------
+
+CleanPAM2019 = function(DF){
+  DF = as.data.frame(DF)
+  
+  #remove dups
+  deduped.data <- DF
+  deduped.data$TIME = deduped.data$GpsDate
+  
+  #clean for where chart has data
+  chart_2015.GPS<-subset(deduped.data, select=c("TIME", "Latitude", "Longitude"))
+  chart_2015.GPS<-chart_2015.GPS[complete.cases(chart_2015.GPS), ]
+  chart_2015.GPS = chart_2015.GPS%>%filter(Longitude< 0)
+  chart_2015.GPS$Date<-as.POSIXct((chart_2015.GPS$TIME), format="%b-%d-%Y", TZ = "UTC")
+  
+  #3 date formats in the same variable :)
+  chart_2015.GPS$DateT<-parse_date_time(chart_2015.GPS$TIME, 
+                                        c("%b-%d-%Y %H:%M:%S", "%m/%d/%Y %H:%M","%m/%d/%Y %I:%M:%S% p", "%Y-%m-%d %H:%M:%S" , "%Y-%m-%d %H:%M:%S%p"))
+  
+  #chart ID = 3
+  chart_2015.GPS$ID <- 4
+  chart_2015.GPS<- chart_2015.GPS%>%select(ID, TIME, DateT, Latitude , Longitude )
+  chart_2015.GPS$Date = as.POSIXct(as.character(chart_2015.GPS$DateT), format="%Y-%m-%d", TZ = "UTC")
+  
+  #Index to make order right
+  chart_2015.GPS<-as.data.table(chart_2015.GPS)
+  setkey(chart_2015.GPS, DateT)
+  setindex(chart_2015.GPS, DateT)
+  chart_2015.GPS<- as.data.frame(chart_2015.GPS)
+  chart_2015.GPS =chart_2015.GPS
+  
+}
+
+path <- "U://GIS/Detection_mapping/GPS/2019/Originals/PAM/CSVs"
+
+#PAM csvs are different and have problems of course! - Read in one at a time
+
+# Data 1
+DF <- fread("U:/GIS/Detection_mapping/GPS/2019/Originals/PAM/CSVs/2019BKWGPS0806.csv")
+
+cols = c("Id"	,"UTC",	"UTCMilliseconds",	"PCLocalTime",	"PCTime",	"GpsDate",	"GPSTime",	"Latitude",	"Longitude",	"Speed",
+  "SpeedType",	"Heading",	"HeadingType",	"TrueHeading",	"MagneticHeading",	"MagneticVariation",	"GPSError",	"DataStatus",	"FixType")
+
+names(DF) = cols
+
+PAM1_2019 = CleanPAM2019(DF)
+
+# Data 2
+DF <- fread("U:/GIS/Detection_mapping/GPS/2019/Originals/PAM/CSVs/2019BKWGPS_lenovo.csv")
+PAM2_2019 = CleanPAM2019(DF)
+
+#combine
+PAM_2019 = rbind(PAM2_2019, PAM1_2019)
+
+
+summary(PAM_2019)
+
+#deduplicate
+PAM_2019 = PAM_2019[!duplicated(PAM_2019$DateT), ]
+#time IS UTC in this case, phew!
+PAM_2019 = PAM_2019%>%mutate(UTC = DateT)
+
+#but some dates don't make sense where we were in port, etc. so remove list id'd in GIS
+notPam = as.POSIXct(c("2019-07-04"))
+notPam =as.data.frame(notPam)
+notPam =notPam%>%rename(Date = notPam)
+
+PAM_2019= PAM_2019[!(as.character(PAM_2019$Date) %in% as.character(notPam$Date)), ]
+summary(PAM_2019)
+PAM_2019$UTC1<-round_date(PAM_2019$UTC, unit="1 minutes")
+PAM_2019_1m = PAM_2019[!duplicated(PAM_2019$UTC1), ]
+
+
+write.csv(PAM_2019_1m, file = "U:/GIS/Detection_mapping/GPS/2019/PAM_2019.csv", row.names = FALSE)
+
+anyDuplicated(PAM_2019$UTC)
+
+
+#interpolate time between points to fill gaps when PAM GPS was unplugged-----------------
+
+full.time    <- with(PAM_2019_1m,seq(UTC[1],UTC[length(UTC)],by=60))
+summary(full.time)
+test =full.time
+
+#intrpolate the coordinates in between missing time stamps
+PAM_2019_1m = as.data.frame(PAM_2019_1m)
+df.zoo <- zoo(PAM_2019_1m[,4:5],PAM_2019_1m$UTC)        # convert to zoo object
+result <- na.approx(df.zoo,xout=test)  # interpolate; result is also a zoo object
+head(result)
+Interp2019 = fortify.zoo(result, name = "UTC")
+
+summary(Interp2019)
+
+#add date field
+Interp2019 = Interp2019%>% mutate( Date = as.Date(as.character(Interp2019$UTC),tz = UTC, format="%Y-%m-%d"))
+
+
+write.csv(Interp2019, file = "U:/GIS/Detection_mapping/GPS/2019/PAM_2019_I.csv", row.names = FALSE)
+

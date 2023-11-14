@@ -1,0 +1,130 @@
+#libraries-----
+library(readxl)
+library(data.table)
+library(here)
+
+#combine annual GPS files into one-----------
+GPS_path <- (here("GPS/Chart/"))
+
+# read in annual YYYY GPS data from csv
+GPS_tables <- list.files(path = GPS_path, pattern = "*.csv", full.names = T)
+GPS_data <- ldply(GPS_tables, read_csv)
+summary(GPS_data)
+
+#deduplicated 2017
+GPS_data=GPS_data[!duplicated(GPS_data$UTC), ]
+
+# create a tibble for cleaned up GPS data for merging to detections, validations and time bins
+###
+GPS<-na.omit(GPS_data)  %>% # pipe - create a linear sequence of operations 
+  mutate(UTC1 = format(as.POSIXct(UTC), "%Y-%m-%d %H:%M")) %>%
+  mutate(year = format(as_date(UTC), "%Y")) %>% # add column for year 
+  mutate(Year_Month = format(as_date(UTC), "%Y-%m")) %>% # add year and month column 
+  # mutate(day_of_year = strftime(as.character(UTC), format = "%j")) %>% 
+  # filter data by % of bin where recording was on, minimum is 5 = 50% of ten minutes recording
+  mutate(year = as_factor(year))# make sure faceting variable is a factor
+
+GPS=GPS[!duplicated(GPS$UTC1), ]
+
+
+#DETECT-GPS MATCH BASED ON TIBBLE FROM Towed_arrayDetects.R join based on time stamp
+GPS <- read.csv(here("GPS/ALLYEARS2015_2021GPS.csv"), stringsAsFactors = F)[ ,1:3]
+GPS= GPS%>%mutate(UTC = as.POSIXct(UTC, format ="%Y-%m-%d %H:%M", tz="UTC"), YEAR = format(as.Date(UTC, format ="%Y-%m-%d %H:%M", tz="UTC"),"%Y"))
+
+#round time up to 10 min, remove dup values (mostly 2021)
+GPS$UTC_round<-round_date(GPS$UTC, unit="1 minutes")
+GPS = GPS[!duplicated(GPS$UTC_round), ]
+
+#round up and group Ha PA by 10 min bin
+presenceHa$UTC_round<-round_date(presenceHa$DateTime, unit="10 minutes")
+presenceHa.10 = presenceHa[!duplicated(presenceHa$UTC_round), ]
+
+#round up and group Mb PA by 10 min bin
+presenceMb$UTC_round<-round_date(presenceMb$DateTime, unit="10 minutes")
+presenceMb.10 = presenceMb[!duplicated(presenceMb$UTC_round), ]
+
+#presence--------------------------
+
+#need GPS and presence tibbles
+
+#function to merge GPS to Wavs with DateT 
+GPS.merge = function(GPS, Detects){
+  
+  setDT(GPS)            ## same
+  setDT(Detects)
+  GPS[, join_time:=UTC]
+  Detects[, join_time:=DateTime]
+  
+  setkey(GPS, join_time)    
+  setindex(GPS, join_time)
+  
+  setkey(Detects, join_time)    
+  setindex(Detects, join_time)
+  
+  ans= GPS[Detects,  roll= "nearest" ]
+  
+  ans%>%select(Longitude, Latitude, UTC, detectT = DateTime, year, Year_Month, day_of_year)
+  
+}
+
+# Ha---------
+ha.GPS = GPS.merge(GPS, presenceHa.10)
+summary(ha.GPS)
+
+write.csv(ha.GPS, file = here("PAM_CSVs/Ha.GPS.csv"), row.names = FALSE)
+
+#Mb--------
+mb.GPS = GPS.merge(GPS, presenceMb.10)
+summary(mb.GPS)
+
+write.csv(mb.GPS, file = here("PAM_CSVs/Mb.GPS.csv"), row.names = FALSE)
+
+#create shapefiles
+# Hampullatus----
+  Ha.GPS_sfUTM <- st_as_sf(ha.GPS, 
+                           coords= c("Longitude","Latitude"),
+                           remove = FALSE) %>%mutate(year = factor(year, levels = c("2015", "2016", "2017", "2019", )))%>%
+  st_set_crs(4326)%>%
+  st_transform(2961) #UTM zone 20
+
+st_write(Ha.GPS_sfUTM, "/Users/chirp/DRIVE/CODE/SDM/TowedArray/shapefiles/Ha/Ha_sfUTM.shp")
+
+#Mbidens----
+Mb.GPS_sf <- st_as_sf(mb.GPS, 
+                      coords= c("Longitude","Latitude"),
+                      remove = FALSE) %>%mutate(year =factor(year))%>%
+  st_set_crs("+init=epsg:4326")%>%
+  st_transform(2961) #UTM zone 20
+
+st_write(Mb.GPS_sf, "/Users/chirp/DRIVE/CODE/SDM/TowedArray/shapefiles/Mb/Mb_sf.shp")
+
+
+# # Validated absent Ha
+# ValidatedAbsentHA.GPS = GPS.merge(GPS, Validated)
+# summary(ValidatedAbsentHA.GPS)
+# 
+# write.csv(ValidatedAbsentHA.GPS, file = "/Users/chirp/DRIVE/GIT/SDM/TowedArray/shapefiles/ValidatedAbsent_Ha.GPS.csv", row.names = FALSE)
+# 
+# #absent detector clicks
+# AbsentClicks.GPS
+# 
+# AbsentClicks.GPS = GPS.merge(GPS, AbsentClicks)
+# summary(AbsentClicks.GPS)
+# 
+# write.csv(AbsentClicks.GPS, file = "/Users/chirp/DRIVE/GIT/SDM/TowedArray/shapefiles/AbsentClicks.GPS.csv", row.names = FALSE)
+
+
+
+
+# # Validated Mb
+# ValidatedAbsentMb.GPS = GPS.merge(GPS, Validated)
+# summary(ValidatedAbsentMb.GPS)
+# 
+# write.csv(ValidatedAbsentMb.GPS, file = "/Users/chirp/DRIVE/GIT/SDM/TowedArray/shapefiles/ValidatedAbsent_Mb.GPS.csv", row.names = FALSE)
+# 
+# # All Bins---------
+# Bins.GPS = GPS.merge(GPS, timeBin)
+# summary(Bins.GPS)
+# write.csv(Bins.GPS, file = "/Users/chirp/DRIVE/GIT/SDM/DetectionCompilation_scripts/TowedArray/shapefiles/Bins.GPS.csv", row.names = FALSE)
+
+
