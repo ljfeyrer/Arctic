@@ -3,4 +3,10 @@
     !/scripts
     /scripts/*
 
+Arctic.Rproj
 .Rproj.user
+.Rhistory
+FIGS**
+data**
+shapes**
+.DS_Store
