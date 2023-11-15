@@ -14,7 +14,6 @@ pacman::p_load(sp, terra, plyr, dplyr, sf, viridis, ggplot2, ggrepel, stringr, h
 
 #filepath hacks------
 
-file.shapes = "~/CODE/TowedArray/Shapes/"
 shapefiles ="~/CODE/Mapping/shapefiles/"
 
 # import NBW Sightings---------
