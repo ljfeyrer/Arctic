@@ -6,9 +6,6 @@ library(ggplot2)
 library(readr)
 
 ship2 = read.csv(here::here("~/CODE/Arctic/data/Time0/Time0_2023.csv"), skip = 1, header = T, stringsAsFactors = F)
-# ship2 = ship2%>%dplyr::select(V1, V3, V4)
-
-# colnames(ship2)= c("V1", "Latitude", "Longitude" )
 
 
 ship = ship2  %>% # fix lat long
@@ -33,14 +30,21 @@ ship = ship%>%dplyr::select(Latitude = LatitudeD, Longitude = LongitudeD, Year, 
 #write clean track for mapping
 ship = ship%>%filter(!is.na(Latitude))
 
-ship = st_as_sf(ship, coords = c("Longitude", "Latitude"), crs = 4326)
+ship = st_as_sf(ship, coords = c("Longitude", "Latitude"), crs = 4326)%>%mutate(LINE_ID = c(rep(1:(nrow(ship)/2), each = 2), 9962))
+tail(ship)
 
-track = st_cast(ship$geometry, "MULTILINESTRING")
+track = ship%>%arrange(UTC1)%>%st_combine()%>%st_cast("LINESTRING")
+plot(st_geometry(track))
 
-ggplot()+  geom_sf(data = ship, col= "orange", lty = 2)
+ggplot()+  geom_sf(data = track, col= "orange", lty = 2)
 
 #write track data
 
-write_csv(ship, "data/shipTrack_2023.csv")
-write_rds(ship, "data/shipTrack_2023.rds")
+# write_csv(ship, "data/shipTrack_2023.csv")
+# write_rds(ship, "data/shipTrack_2023.rds")
+write_sf(ship, "shapes/shiptrackpts_2023.shp")
+write_sf(track, "shapes/shiptrack_2023.shp")
 
+
+#cetaceans
+NBW2023 = read.csv("data/2023/ArcticNBW2023_Cetaceans.csv")%>%filter(Species == "Northern Bottlenose")%>%st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326)

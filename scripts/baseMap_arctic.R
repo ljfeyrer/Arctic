@@ -7,48 +7,54 @@
 # install.packages("pacman")
 pacman::p_load(sp, terra, plyr, dplyr, sf, viridis, ggplot2, ggrepel, stringr, here, ggtext, readr,
                rnaturalearth, rnaturalearthdata, pals, tidyr, fuzzyjoin, patchwork,mapsf,readxl,
-               ggforce, readr, raster, ggspatial, rgeos, lubridate, stars, patchwork, scales, RColorBrewer, grafify)
-
+               ggforce, readr, ggspatial, rgeos, lubridate, stars, patchwork, scales, RColorBrewer, grafify)
 
 
 
 #filepath hacks------
 
-shapefiles ="~/CODE/Mapping/shapefiles/"
+shapefiles ="~/CODE/shapefiles/"
 
 # import NBW Sightings---------
       sightHa1 = read_csv(here::here("data/cetacean_sightings_trip1.csv"))%>%filter(Species == "Northern Bottlenose")
-      sightHa1 = st_as_sf(sightHa1, coords = c("Longitude", "Latitude"), crs = 4326)
+      sightHa1_2022 = st_as_sf(sightHa1, coords = c("Longitude", "Latitude"), crs = 4326)
       
       #from LV data
       sightHa2 = read_rds(here::here("data/sightHa_location.rds"))
       sightHa2 = sightHa2[!duplicated(sightHa2$Latitude, sightHa2$Longitude ), ]
       
-      sightHa2 = st_as_sf(sightHa2, coords = c("Longitude", "Latitude"), crs = 4326)
+      sightHa2_2022 = st_as_sf(sightHa2, coords = c("Longitude", "Latitude"), crs = 4326)
 
 
-# import ship track -----------
-    ship = read_sf(here::here("shapes/ships_track2022.shp"))%>%st_transform(4326)
+# import ship tracks -----------
+    ship_2022 = read_sf(here::here("shapes/ships_track2022.shp"))%>%st_transform(4326)
+      ship_2023 = read_sf(here::here("shapes/shiptrack_2023.shp"))%>%st_transform(4326)
+      
 
-#extent----
-    ext <- extent( lims )
-    
-    # Get x and y limits
-    adj <- round( ext@xmin*0.1 )
-    lims <- list( x=c(ext@xmin-adj, ext@xmax+adj), y=c(ext@ymin-adj, ext@ymax+adj) )
-    
-    lims = list(  x = c(-65, -51), y = c(60, 68.25))
+
 
 
 #read eez shapefile----
-EEZ <- read_sf(paste(shapefiles, "World_EEZ_v11_20191118/eez_v11.shp", sep = ""))%>%filter(TERRITORY1 == "Canada")
+EEZ <- read_sf(paste(shapefiles, "EEZ/EEZ_can.shp", sep = ""))
+      
+      #extent----
+      
+      # Get the vertical and horizontal limits
+      
+      lims = list(  x = c(-74, -51), y = c(60,73))
+      
+      ext <- extent( lims )
+      
+      # # Get x and y limits
+      # adj <- round( ext@xmin*0.1 )
+      # lims <- list( x=c(ext@xmin-adj, ext@xmax+adj), y=c(ext@ymin-adj, ext@ymax+adj) )
 
 
 # bathy data -------
 
       #for more detailed contours use GEBCO
       
-      r <- terra::rast("~/CODE/Mapping/shapefiles/GEBCO_bathy/gebco_2020.tif")
+      r <- terra::rast(paste(shapefiles,"Bathymetry/GEBCO_bathy/gebco_2020.tif", sep = ""))
       st_crs(r)
       
       #need to downsample bc too big
@@ -73,13 +79,27 @@ EEZ <- read_sf(paste(shapefiles, "World_EEZ_v11_20191118/eez_v11.shp", sep = "")
 
 
 # north america for reference------
-land <- ne_countries( scale = "large",continent = "north america", returnclass = "sf")
 
-
-land <- read_sf(here::here("~/CODE/Mapping/shapefiles/countries/ne_50m_admin_0_countries.shp"))%>%
+land <- read_sf(here::here("~/CODE/shapefiles/coastline/worldcountries/ne_50m_admin_0_countries.shp"))%>%
   dplyr::filter(CONTINENT == "North America")
 
 #  plot basemap as object m-----
+      
+      #extent----
+      
+      # Get the vertical and horizontal limits
+      
+      lims = list(  x = c(-74, -51), y = c(60,73))
+      
+      ext <- extent( lims )
+      
+      # # Get x and y limits
+      # adj <- round( ext@xmin*0.1 )
+      # lims <- list( x=c(ext@xmin-adj, ext@xmax+adj), y=c(ext@ymin-adj, ext@ymax+adj) )
+      
+      cols = c("NBW 2022" ="#ffcb00", "NBW 2023"="#ce1c25")
+
+      
 m<-ggplot() +
   # add bathy--
   geom_raster(data = bathy_crop, aes(x= x, y=y, fill = Depth)) +
@@ -90,42 +110,52 @@ m<-ggplot() +
                        midpoint = -100)+
   
   #add eez
-  geom_sf(data = EEZ, col = "grey50", fill = NA, lty = "aa", size = 0.2) +
+  geom_sf(data = EEZ, col = "white", fill = NA, lty = "aa", size = 0.5) +
   
 # add land region
   geom_sf(  data = land, color=NA, fill="grey50") +
   
   #add ship track
   
-  geom_sf(data = ship, col= "yellow", lty = 2,
+  geom_sf(data = ship_2022, col= "#ff8700", size = 0.5
           ) +
+        geom_sf(data = ship_2023, col= "#931c1b",size = 0.5
+        ) +
   #add sightings of NBW
-  # geom_sf(data = sightHa1, col = "blue", fill = NA,
-  #         size = 3, shape = 8) +
-  geom_sf(data = sightHa2, col = "#ee7600", fill = "#ee7600", alpha = 0.35,
-          size = 3, shape = 21) +
+  geom_sf(data = sightHa2_2022, aes(col = "NBW 2022"), fill = "#ffcb00", shape = 21, alpha = .5,
+          size = 2) +
+  geom_sf(data = NBW2023, aes(col = "NBW 2023"),  shape = 21, fill = "#ce1c25",  alpha = .5, 
+          size = 3) +
+
   # set map limits
   coord_sf(lims_method = "orthogonal",
            xlim=lims$x, ylim=lims$y, expand = F
   )+
   
   # add text annotation for Nuuk
-  annotate(geom = "text", y = 64.17, x = -51.7, label = "Nuuk",fontface = "bold",
-           color = "black", size = 4, ) +
+  annotate(geom = "text", y = 64., x = -52, label = "Nuuk",fontface = "bold",
+           color = "black", size =3, ) +
+  annotate(geom = "text", y = 63.7, x = -68.5, label = "Iqaluit",fontface = "bold",
+           color = "black", size =3, ) +
 
+  #legend
+  scale_color_manual(breaks = c("NBW 2022", "NBW 2023"), values = cols)+
+  guides(fill = "none")+
+  theme_bw()+
   # format axes
   ylab("") + 
   xlab("") +
   theme(plot.margin = margin(.1, .5, .1, .1, "cm"),
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
-       legend.title = element_blank() , legend.position = "none"   )
+       legend.title = element_blank(),  legend.key = element_blank(), legend.position = c(.85,.95) )
+  
 m
 
  
 #save map
  
- gg_Fig2path =  here::here("FIGS/NBW_Sightings2022.png")
-ggsave(gg_Fig2path, m, width = 5, height = 7, units = "in", dpi = 300)
+ gg_Fig2path =  here::here("FIGS/NBW_Sightings2023.png")
+ggsave(gg_Fig2path, m, dpi = 300)
 
 
