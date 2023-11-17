@@ -1,10 +1,12 @@
-#2023 data
+#2023 data-----
 library(dplyr)
 library(stringr)
 library(sf)
 library(ggplot2)
 library(readr)
 
+
+#TRACK-------
 ship2 = read.csv(here::here("~/CODE/Arctic/data/Time0/Time0_2023.csv"), skip = 1, header = T, stringsAsFactors = F)
 
 
@@ -46,5 +48,5 @@ write_sf(ship, "shapes/shiptrackpts_2023.shp")
 write_sf(track, "shapes/shiptrack_2023.shp")
 
 
-#cetaceans
+#cetaceans------
 NBW2023 = read.csv("data/2023/ArcticNBW2023_Cetaceans.csv")%>%filter(Species == "Northern Bottlenose")%>%st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326)

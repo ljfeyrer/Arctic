@@ -5,9 +5,9 @@
 #might not need all these...
 
 # install.packages("pacman")
-pacman::p_load(sp, terra, plyr, dplyr, sf, viridis, ggplot2, ggrepel, stringr, here, ggtext, readr,
+pacman::p_load(sp, terra, plyr, dplyr, sf, viridis, ggplot2, ggrepel, stringr, here, ggtext, readr,raster,
                rnaturalearth, rnaturalearthdata, pals, tidyr, fuzzyjoin, patchwork,mapsf,readxl,
-               ggforce, readr, ggspatial, rgeos, lubridate, stars, patchwork, scales, RColorBrewer, grafify)
+               ggforce, readr, ggspatial, lubridate, stars, patchwork, scales, RColorBrewer, grafify)
 
 
 
@@ -16,6 +16,7 @@ pacman::p_load(sp, terra, plyr, dplyr, sf, viridis, ggplot2, ggrepel, stringr, h
 shapefiles ="~/CODE/shapefiles/"
 
 # import NBW Sightings---------
+      #2022
       sightHa1 = read_csv(here::here("data/cetacean_sightings_trip1.csv"))%>%filter(Species == "Northern Bottlenose")
       sightHa1_2022 = st_as_sf(sightHa1, coords = c("Longitude", "Latitude"), crs = 4326)
       
@@ -23,8 +24,15 @@ shapefiles ="~/CODE/shapefiles/"
       sightHa2 = read_rds(here::here("data/sightHa_location.rds"))
       sightHa2 = sightHa2[!duplicated(sightHa2$Latitude, sightHa2$Longitude ), ]
       
-      sightHa2_2022 = st_as_sf(sightHa2, coords = c("Longitude", "Latitude"), crs = 4326)
-
+      sightHa2_2022 = st_as_sf(sightHa2, coords = c("Longitude", "Latitude"), crs = 4326)%>%mutate(Year = "2022")
+      
+      
+      #2023
+      NBW2023 = read.csv("data/2023/ArcticNBW2023_Cetaceans.csv")%>%filter(Species == "Northern Bottlenose")%>%
+        st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326)%>%mutate(Year = "2023")
+      
+      
+      
 
 # import ship tracks -----------
     ship_2022 = read_sf(here::here("shapes/ships_track2022.shp"))%>%st_transform(4326)
@@ -43,7 +51,7 @@ EEZ <- read_sf(paste(shapefiles, "EEZ/EEZ_can.shp", sep = ""))
       
       lims = list(  x = c(-74, -51), y = c(60,73))
       
-      ext <- extent( lims )
+      ext <- raster::extent( lims )
       
       # # Get x and y limits
       # adj <- round( ext@xmin*0.1 )
@@ -55,16 +63,11 @@ EEZ <- read_sf(paste(shapefiles, "EEZ/EEZ_can.shp", sep = ""))
       #for more detailed contours use GEBCO
       
       r <- terra::rast(paste(shapefiles,"Bathymetry/GEBCO_bathy/gebco_2020.tif", sep = ""))
-      st_crs(r)
+      # st_crs(r)
       
       #need to downsample bc too big
       bathy = terra::aggregate(r, fact = 2)
-      # bathy_df <- as.data.frame(bathy, xy = T)%>%dplyr::rename(Depth = gebco_2020)
-      
-      # ggplot(bathy_df, aes(x = x, y = y, fill = Depth)) +
-      #   geom_raster() +
-      #   scale_fill_viridis_c(direction = 1)
-      # ext(bathy)
+
       
       #now crop to extent of study area
       bathy_crop = crop(bathy, ext)
@@ -91,13 +94,13 @@ land <- read_sf(here::here("~/CODE/shapefiles/coastline/worldcountries/ne_50m_ad
       
       lims = list(  x = c(-74, -51), y = c(60,73))
       
-      ext <- extent( lims )
+      ext <- raster::extent( lims )
       
       # # Get x and y limits
       # adj <- round( ext@xmin*0.1 )
       # lims <- list( x=c(ext@xmin-adj, ext@xmax+adj), y=c(ext@ymin-adj, ext@ymax+adj) )
       
-      cols = c("NBW 2022" ="#ffcb00", "NBW 2023"="#ce1c25")
+      cols = c("2022" ="#ffcb00", "2023"="#ce1c25")
 
       
 m<-ggplot() +
@@ -122,10 +125,10 @@ m<-ggplot() +
         geom_sf(data = ship_2023, col= "#931c1b",size = 0.5
         ) +
   #add sightings of NBW
-  geom_sf(data = sightHa2_2022, aes(col = "NBW 2022"), fill = "#ffcb00", shape = 21, alpha = .5,
+  geom_sf(data = sightHa2_2022, aes(col = Year), fill = "#ffcb00", shape = 19, alpha = .5,
           size = 2) +
-  geom_sf(data = NBW2023, aes(col = "NBW 2023"),  shape = 21, fill = "#ce1c25",  alpha = .5, 
-          size = 3) +
+  geom_sf(data = NBW2023, aes(col = Year),  shape = 21, fill = "#ce1c25",  alpha = .5, 
+          size = 2) +
 
   # set map limits
   coord_sf(lims_method = "orthogonal",
@@ -139,16 +142,17 @@ m<-ggplot() +
            color = "black", size =3, ) +
 
   #legend
-  scale_color_manual(breaks = c("NBW 2022", "NBW 2023"), values = cols)+
-  guides(fill = "none")+
+  scale_color_manual(values = cols)+
+  guides(fill = "none", color = guide_legend(override.aes = list(shape = 19, size = 2)))+
   theme_bw()+
   # format axes
   ylab("") + 
   xlab("") +
+  labs(col = "NBW")+
   theme(plot.margin = margin(.1, .5, .1, .1, "cm"),
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
-       legend.title = element_blank(),  legend.key = element_blank(), legend.position = c(.85,.95) )
+       legend.key = element_blank(), legend.position = c(.85,.9) )
   
 m
 
