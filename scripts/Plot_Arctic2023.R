@@ -7,15 +7,18 @@ library(readr)
 
 
 #TRACK-------
-ship2 = read.csv(here::here("~/CODE/Arctic/data/Time0/Time0_2023.csv"), skip = 1, header = T, stringsAsFactors = F)
+ship2a = read.csv(here::here("~/CODE/Arctic/data/Time0/Canada2023leg1.csv"), skip = 1, header = T, stringsAsFactors = F)
+ship2b = read.csv(here::here("~/CODE/Arctic/data/Time0/Canada2023leg2.csv"), skip = 1, header=T, stringsAsFactors=F)%>%select(-c(24, 25))
+
+ship_2023 = rbind(ship2a, ship2b)
 
 
-ship = ship2  %>% # fix lat long
-  mutate(LatD = as.numeric(str_sub(ship2$Latitude,1,2)))%>%
-  mutate(LatM = as.numeric(str_extract(ship2$Latitude,"(?<=-).+(?=-N)"))/60)%>%
+ship = ship_2023  %>% # fix lat long
+  mutate(LatD = as.numeric(str_sub(ship_2023$Latitude,1,2)))%>%
+  mutate(LatM = as.numeric(str_extract(ship_2023$Latitude,"(?<=-).+(?=-N)"))/60)%>%
   mutate(LatitudeD = LatD+LatM)%>%
-  mutate(LongD = as.numeric(str_sub(ship2$Longitude,1,3)))%>%
-  mutate(LongM = as.numeric(str_extract(ship2$Longitude,"(?<=-).+(?=-W)"))/60)%>%
+  mutate(LongD = as.numeric(str_sub(ship_2023$Longitude,1,3)))%>%
+  mutate(LongM = as.numeric(str_extract(ship_2023$Longitude,"(?<=-).+(?=-W)"))/60)%>%
   mutate(LongitudeD = (LongD+LongM)*-1)%>%
   mutate(Date = paste(Day, Month, Year,  sep = "/"))%>%
   mutate(Time = paste(Hour, Minute, Second, sep = ":"))%>%
@@ -32,7 +35,7 @@ ship = ship%>%dplyr::select(Latitude = LatitudeD, Longitude = LongitudeD, Year, 
 #write clean track for mapping
 ship = ship%>%filter(!is.na(Latitude))
 
-ship = st_as_sf(ship, coords = c("Longitude", "Latitude"), crs = 4326)%>%mutate(LINE_ID = c(rep(1:(nrow(ship)/2), each = 2), 9962))
+ship = st_as_sf(ship, coords = c("Longitude", "Latitude"), crs = 4326)%>%mutate(LINE_ID = c(rep(1:(nrow(ship)/2), each = 2)))
 tail(ship)
 
 track = ship%>%arrange(UTC1)%>%st_combine()%>%st_cast("LINESTRING")
