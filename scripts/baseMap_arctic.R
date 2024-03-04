@@ -122,13 +122,13 @@ m<-ggplot() +
   
   geom_sf(data = ship_2022, col= "#ff8700", size = 0.5
           ) +
-        geom_sf(data = ship_2023, col= "#931c1b",size = 0.5
-        ) +
+        # geom_sf(data = ship_2023, col= "#931c1b",size = 0.5
+        # ) +
   #add sightings of NBW
   geom_sf(data = sightHa2_2022, aes(col = Year), fill = "#ffcb00", shape = 19, alpha = .5,
           size = 2) +
-  geom_sf(data = NBW2023, aes(col = Year),  shape = 21, fill = "#ce1c25",  alpha = .5, 
-          size = 2) +
+  # geom_sf(data = NBW2023, aes(col = Year),  shape = 21, fill = "#ce1c25",  alpha = .5, 
+  #         size = 2) +
 
   # set map limits
   coord_sf(lims_method = "orthogonal",
@@ -159,7 +159,7 @@ m
  
 #save map
  
- gg_Fig2path =  here::here("FIGS/NBW_Sightings2023.png")
+ gg_Fig2path =  here::here("FIGS/NBW_Sightings2022b.png")
 ggsave(gg_Fig2path, m, dpi = 300)
 
 
