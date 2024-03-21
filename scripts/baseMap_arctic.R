@@ -5,9 +5,12 @@
 #might not need all these...
 
 # install.packages("pacman")
-pacman::p_load(sp, terra, plyr, dplyr, sf, viridis, ggplot2, ggrepel, stringr, here, ggtext, readr,raster,
-               rnaturalearth, rnaturalearthdata, pals, tidyr, fuzzyjoin, patchwork,mapsf,readxl,
-               ggforce, readr, ggspatial, lubridate, stars, patchwork, scales, RColorBrewer, grafify)
+pacman::p_load(sp, terra, plyr, dplyr, sf, viridis, ggplot2, ggrepel, stringr, 
+               here, ggtext, readr,
+               rnaturalearth, rnaturalearthdata, pals, tidyr, fuzzyjoin, 
+               patchwork,mapsf,readxl,
+               ggforce, readr, ggspatial, lubridate, stars, patchwork, scales, 
+               RColorBrewer, grafify)
 
 
 
@@ -28,7 +31,7 @@ shapefiles ="~/CODE/shapefiles/"
       
       
       #2023
-      NBW2023 = read.csv("data/2023/ArcticNBW2023_Cetaceans.csv")%>%filter(Species == "Northern Bottlenose")%>%
+      NBW2023 = read.csv("output/Arctic2023_AllCetaceans.csv")%>%filter(Species == "Northern Bottlenose")%>%
         st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326)%>%mutate(Year = "2023")
       
       
@@ -120,15 +123,15 @@ m<-ggplot() +
   
   #add ship track
   
-  geom_sf(data = ship_2022, col= "#ff8700", size = 0.5
-          ) +
-        # geom_sf(data = ship_2023, col= "#931c1b",size = 0.5
-        # ) +
+  # geom_sf(data = ship_2022, col= "#ff8700", size = 0.5
+  #         ) +
+        geom_sf(data = ship_2023, col= "#931c1b",size = 0.5
+        ) +
   #add sightings of NBW
-  geom_sf(data = sightHa2_2022, aes(col = Year), fill = "#ffcb00", shape = 19, alpha = .5,
-          size = 2) +
-  # geom_sf(data = NBW2023, aes(col = Year),  shape = 21, fill = "#ce1c25",  alpha = .5, 
+  # geom_sf(data = sightHa2_2022, aes(col = Year), fill = "#ffcb00", shape = 19, alpha = .5,
   #         size = 2) +
+  geom_sf(data = NBW2023, aes(col = Year),  shape = 21, fill = "#ce1c25",  alpha = .5,
+          size = 2) +
 
   # set map limits
   coord_sf(lims_method = "orthogonal",
@@ -159,7 +162,7 @@ m
  
 #save map
  
- gg_Fig2path =  here::here("FIGS/NBW_Sightings2022b.png")
-ggsave(gg_Fig2path, m, dpi = 300)
+ gg_Fig2path =  here::here("FIGS/NBW_Sightings2023.png")
+ggsave(gg_Fig2path, m, dpi = 300, height = 7, width = 5, units = "in")
 
 

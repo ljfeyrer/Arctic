@@ -6,6 +6,7 @@
 Arctic.Rproj
 .Rproj.user
 .Rhistory
+output**
 FIGS**
 data**
 shapes**
