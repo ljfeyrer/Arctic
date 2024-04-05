@@ -163,8 +163,6 @@ here::here()
     }
     
     #trip 1
-    
-    
     headers = read.csv(here::here("data/GPS/TOGT8LAURA.csv"), skip = 1, header = F, nrows = 1, as.is = T, stringsAsFactors = F)
     ship1 = read.csv(here::here("data/GPS/TOGT8LAURA.csv"), skip = 2, header = F, stringsAsFactors = F)
     colnames(ship1)= headers
@@ -172,7 +170,6 @@ here::here()
    ship1 = cleantrack(ship1) 
     
     #trip 2
-    
     ship2 = read.csv(here::here("data/GPS/Trip2/TOGT8LAURA01111111.csv"), skip = 2, header = F, stringsAsFactors = F)
     colnames(ship2)= headers
     

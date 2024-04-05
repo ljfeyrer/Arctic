@@ -4,6 +4,7 @@ library(stringr)
 library(sf)
 library(ggplot2)
 library(readr)
+library(lubridate)
 
 
 #TRACK-------
@@ -55,42 +56,60 @@ ggplot()+  geom_sf(data = ship%>%filter(Date == "4/11/2023"), col= "orange", lty
 Whales2023 = read.csv("data/2023/ArcticNBW2023_Cetaceans.csv")%>%mutate(X = NULL)
 
 
-Whales2023 = Whales2023%>% mutate(Enc_start = as.POSIXct(Local_Time, "%Y-%m-%d %H:%M:%S", tz = "UTC"),
-                            Enc_end = as.POSIXct(Local_Time_End, "%Y-%m-%d %H:%M:%S", tz = "UTC"),
+Whales2023 = Whales2023%>% mutate(Enc_start = as.POSIXct(Local_Time, "%Y-%m-%d %H:%M:%S", tz = "Etc/GMT-2"),
+                            Enc_end = as.POSIXct(Local_Time_End, "%Y-%m-%d %H:%M:%S", tz = "Etc/GMT-2" ), 
+                            UTC = as.POSIXct(Enc_start, tz = "UTC"), 
                             Enc_time = difftime(Enc_end,Enc_start, units = "mins"))
 
-
-write.csv(Whales2023%>%select(Enc_mins = Enc_time,Date_UTC = Enc_start, Latitude, Longitude, Min, Best, Max, Dist, 
+#only Leg 1
+#fixed UTC time variable here
+write.csv(Whales2023%>%select(UTC, Date_Local = Enc_start, Latitude, Longitude, Enc_mins = Enc_time, Min, Best, Max, Dist, 
                               Photo = Pic_no, Species, Behaviour), row.names = F, "output/ArcticWhales_2023.csv")
 
 
 #LV------
 #read in List view csv file for Leg 2
-sightHa_2023 = read.csv("data/List View Leg2_2023.csv", colClasses = "character")
+sightHa_2023 = read.csv("data/2023/List View Leg2_2023.csv", colClasses = "character")
+
 
 #clean date format-----
 sightHa_2023$Date =  as.Date(sightHa_2023$Date.Original, "%m/%d/%Y")
 summary(sightHa_2023$Date)
-sightHa_2023 = sightHa_2023%>%mutate(YEAR = as.numeric(format(Date, "%Y")), 
-                                     Time = as.POSIXct(Date.Original,  tz = "UTC", format = "%m/%d/%Y %H:%M"))
+sightHa_2023 = sightHa_2023%>%mutate(YEAR = as.numeric(format(Date, "%Y")),  
+                                     Time = as.POSIXct(Date.Created,   format = "%Y %H:%M:%S", tz = "Etc/GMT-2"), 
+                                     UTC = as.POSIXct(Time, tz = "UTC"))
 
 
-#deduplicate based on time
+#deduplicate based on enc time
 
 sightHa_2023=sightHa_2023[!duplicated(sightHa_2023$Time), ]
-
-sightHa_2023 = sightHa_2023%>%mutate(enc_time = round_date(Time, unit="15 mins"))
+sightHa_2023 = sightHa_2023%>%mutate(enc_time = round_date(Time, unit="15 mins"), )
 sightHa_2023=sightHa_2023[!duplicated(sightHa_2023$enc_time), ]
 
+#remove erroneous pic from the harbour on Nov 4
+sightHa_2023 = sightHa_2023%>%filter( Date != "2023-11-04")
 
-#make simple version for editting
-sightHa = sightHa_2023%>%dplyr::select(Date,Time,Longitude, Latitude,
+
+#make simple version for manual editing
+sightHa = sightHa_2023%>%dplyr::select(Date,Time,UTC, Longitude, Latitude,
 )
-write_csv(sightHa,  "output/sightHa_LV2023.csv")
 
-
+# one station was missing lat/ long from field notes
+# this was taken from station info below 
+# notes were added manually and saved as xls
+# manual edits to output> ArcticNBW2023_Cetaceans.xlsx to add leg 1 +2 and create report table
+# the combined data with all fields was saved as a csv in output> Arctic2023_AllCetaceans.csv
 
 
 #Set infos
 
 stations = read.csv("data/2023/2023NAFO_set_coords_LFeyrer.csv")
+
+#missing lat longs for NBW sighting based on field notes
+stations%>%filter(Start.Date == "10/11/2023", Set.Number == 118)
+%>%dplyr::select(Latitude, Longitude)
+
+sightHa = sightHa%>%mutate( Longitude = ifelse( Date == "2023-11-10", "-58.721", Longitude),
+                                                Latitude = ifelse( Date == "2023-11-10", "64.118", Latitude))
+
+write_csv(sightHa%>%select(Date, Local_Time = Time, UTC, Longitude, Latitude),  "output/sightHa_LV2023.csv")
