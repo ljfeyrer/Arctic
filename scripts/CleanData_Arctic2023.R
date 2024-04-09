@@ -42,7 +42,7 @@ tail(ship)
 track = ship%>%arrange(UTC1)%>%st_combine()%>%st_cast("LINESTRING")
 # plot(st_geometry(track))
 
-ggplot()+  geom_sf(data = ship%>%filter(Date == "4/11/2023"), col= "orange", lty = 2)
+# ggplot()+  geom_sf(data = ship%>%filter(Date == "4/11/2023"), col= "orange", lty = 2)
 # 
 # #write track data
 # 
@@ -58,13 +58,13 @@ Whales2023 = read.csv("data/2023/ArcticNBW2023_Cetaceans.csv")%>%mutate(X = NULL
 
 Whales2023 = Whales2023%>% mutate(Enc_start = as.POSIXct(Local_Time, "%Y-%m-%d %H:%M:%S", tz = "Etc/GMT-2"),
                             Enc_end = as.POSIXct(Local_Time_End, "%Y-%m-%d %H:%M:%S", tz = "Etc/GMT-2" ), 
-                            UTC = as.POSIXct(Enc_start, tz = "UTC"), 
+                            UTC = as.character(as.POSIXct(Enc_start, tz = "UTC")), 
                             Enc_time = difftime(Enc_end,Enc_start, units = "mins"))
 
 #only Leg 1
 #fixed UTC time variable here
 write.csv(Whales2023%>%select(UTC, Date_Local = Enc_start, Latitude, Longitude, Enc_mins = Enc_time, Min, Best, Max, Dist, 
-                              Photo = Pic_no, Species, Behaviour), row.names = F, "output/ArcticWhales_2023.csv")
+                              Photo = Pic_no, Species, Behaviour), row.names = F, "output/ArcticWhales_2023_leg1.csv")
 
 
 #LV------
@@ -76,8 +76,9 @@ sightHa_2023 = read.csv("data/2023/List View Leg2_2023.csv", colClasses = "chara
 sightHa_2023$Date =  as.Date(sightHa_2023$Date.Original, "%m/%d/%Y")
 summary(sightHa_2023$Date)
 sightHa_2023 = sightHa_2023%>%mutate(YEAR = as.numeric(format(Date, "%Y")),  
-                                     Time = as.POSIXct(Date.Created,   format = "%Y %H:%M:%S", tz = "Etc/GMT-2"), 
-                                     UTC = as.POSIXct(Time, tz = "UTC"))
+                                     Time = as.POSIXct(Date.Time,   format = "%m/%d/%Y %H:%M", tz = "Etc/GMT-2"), 
+                                     UTC = as.POSIXct(Time, tz = "UTC"),
+                                     Longitude = as.numeric(Longitude), Latitude =as.numeric(Latitude ))
 
 
 #deduplicate based on enc time
@@ -89,10 +90,6 @@ sightHa_2023=sightHa_2023[!duplicated(sightHa_2023$enc_time), ]
 #remove erroneous pic from the harbour on Nov 4
 sightHa_2023 = sightHa_2023%>%filter( Date != "2023-11-04")
 
-
-#make simple version for manual editing
-sightHa = sightHa_2023%>%dplyr::select(Date,Time,UTC, Longitude, Latitude,
-)
 
 # one station was missing lat/ long from field notes
 # this was taken from station info below 
@@ -107,9 +104,23 @@ stations = read.csv("data/2023/2023NAFO_set_coords_LFeyrer.csv")
 
 #missing lat longs for NBW sighting based on field notes
 stations%>%filter(Start.Date == "10/11/2023", Set.Number == 118)
-%>%dplyr::select(Latitude, Longitude)
 
-sightHa = sightHa%>%mutate( Longitude = ifelse( Date == "2023-11-10", "-58.721", Longitude),
-                                                Latitude = ifelse( Date == "2023-11-10", "64.118", Latitude))
+sightHa = sightHa%>%mutate( Longitude = ifelse( Date == "2023-11-10", -58.721, Longitude),
+                                                Latitude = ifelse( Date == "2023-11-10", 64.118, Latitude), 
+                            Date_Local = as.character(Time), UTC = as.character(UTC), Species = "Northern Bottlenose", Min = 1,
+                          Best =  ifelse(Date == "2023-11-11", 4, 
+                                         ifelse(Date == "2023-11-16", 5,NA)),
+                          Max =  ifelse(Date == "2023-11-11", 5, 
+                                         ifelse(Date == "2023-11-16", 6,NA)))
 
-write_csv(sightHa%>%select(Date, Local_Time = Time, UTC, Longitude, Latitude),  "output/sightHa_LV2023.csv")
+
+write_csv(sightHa%>%select(UTC, Date_Local, Longitude, Latitude, Species, Min),  "output/sightHa_LV2023_leg2.csv")
+
+#join leg 1 & 2
+
+Cet_sightingsAR =bind_rows(Whales2023%>%select(UTC, Date_Local = Local_Time, Latitude, Longitude, Enc_mins = Enc_time, Min, Best, Max, Dist, 
+                                                         Photo = Pic_no, Species, Behaviour),
+                           sightHa%>%select(UTC, Date_Local, Longitude, Latitude, Species, Min))
+
+
+write.csv(Cet_sightingsAR, "output/all_cetSightings_AR2023.csv" )
