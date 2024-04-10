@@ -2,11 +2,9 @@
 # deduplicates records and renames variables
 #November 2022
 
-# install.packages("data.table")
-
 
 #LIBRARIES------------
-library(data.table)
+pacman::p_load(data.table, dplyr, readxl)
 
 here::here()
 
