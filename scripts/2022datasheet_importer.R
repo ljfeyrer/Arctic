@@ -1,77 +1,77 @@
-#This script imports xls/ csv files from tablet program into one table, formats GPS, 
+#This script imports xls/ csv field data output files collected during fieldwork 
+# from fieldDataEntry matlab program into one table, formats GPS, 
 # deduplicates records and renames variables
-#November 2022
+#Laura Feyrer 2024
 
 
 #LIBRARIES------------
-pacman::p_load(data.table, dplyr, readxl)
+pacman::p_load(data.table, dplyr, readxl, purrr, readr, tidyr, stringr)
 
 here::here()
 
+# # # Read each file and write it to csv  
+#function to translate xlsx to csv, need to specify sheet
+csv_maker =function(f) {
+  df = read_xlsx(f, sheet = sheet)
+  write.csv(df, gsub("xlsx", "csv", f), row.names=FALSE) }
+
+#function to move csvs to new folder in input based on sheet name
+move.files <- function(x){
+  file.rename( from = file.path(valid_path, x) ,
+               to = file.path(paste(here::here(), "/input/",sheet, sep = ""), x) )
+}    
+
 #CETACEANS------------
-# # # Read each file and write it to csv   
- valid_path <- (here::here("data/originals"))
-   
+    original_path <- (here::here("input/originals"))
+    sheet = "Cetaceans"
+    year = 2022
+    Trip = "Arctic_Leg1"
  
-    #1.
-    #function to translate xlsx to csv, need to specify sheet
- sheet = "Cetaceans"
+#read in data files
+     files.to.read = list.files(original_path, pattern="xlsx", full.names = T)
+#write csvs to same folder
+    lapply(files.to.read, csv_maker)
      
- csv_maker =function(f) {
-     df = read_xlsx(f, sheet = sheet)
-      write.csv(df, gsub("xlsx", "csv", f), row.names=FALSE) }
-    
-    #2. 
-     files.to.read = list.files(valid_path, pattern="xlsx", full.names = T)
-    
-    #3. 
-     lapply(files.to.read, csv_maker)
-     
-     #move to new folder
-     move.files <- function(x){
-       file.rename( from = file.path(valid_path, x) ,
-                    to = file.path(paste(here::here(), "/data/",sheet, sep = ""), x) )
-     }    
-     
-     #list csvs
-     files.csv= list.files(valid_path, pattern="csv")
-     
+#Move csvs to new folder
+     files.csv= list.files(original_path, pattern="csv")
      lapply(files.csv, move.files)
     
-    # Compile and clean variable data from csv----
+# Compile and clean variables from multiple csv data----
      
-    FILEpath <- (here::here("data/cetaceans"))
+     csv_path <- file.path(paste(here::here(), "/input/",sheet, sep = ""))
      
-    Valid_tables <- list.files(path = FILEpath, pattern = "*.csv", full.names = T)
-    valid_data <- ldply(Valid_tables, read_csv)
+    all_tables <- list.files(path = csv_path, pattern = "*.csv", full.names = T)
+    all_data <- all_tables%>%map(read_csv)%>%bind_rows()
     
-    summary(valid_data)
+    summary(all_data)
     
     # create a tibble for cleaned up validated data 
-    ###
-    valid_data<-valid_data  %>% # pipe - create a linear sequence of operations 
-      mutate(LatD = as.numeric(str_sub(valid_data$StartPos,1,2)))%>%
+    #note this will warn of NAs for observations without coordinates
+    all_data<-all_data  %>% # pipe - create a sequence of data cleaning operations 
+      mutate(LatD = as.numeric(str_sub(all_data$StartPos,1,2)))%>%
       
-    mutate(LatM = as.numeric(str_extract(valid_data$StartPos,"(?<=d).+(?=N)"))/60)%>%
+    mutate(LatM = as.numeric(str_extract(all_data$StartPos,"(?<=d).+(?=N)"))/60)%>%
       mutate(Latitude = LatD+LatM)%>%
-      mutate(LongD = as.numeric(str_extract(valid_data$StartPos,"(?<=\\s).+(?=d)")))%>%
-      mutate(LongM = as.numeric(str_extract(valid_data$StartPos,"[\\d\\.]+(?=W)"))/60)%>%
+      mutate(LongD = as.numeric(str_extract(all_data$StartPos,"(?<=\\s).+(?=d)")))%>%
+      mutate(LongM = as.numeric(str_extract(all_data$StartPos,"[\\d\\.]+(?=W)"))/60)%>%
       mutate(Longitude = (LongD+LongM)*-1)%>%
       mutate(Port_Star = PS)%>%  # change field name to something that is clear
         mutate(Species = ifelse(Species == "nbw", "Northern Bottlenose",
                                 ifelse(Species == "northen bottlenose", "Northern Bottlenose",
-                                       Species)))%>%drop_na(Latitude)
+                                       Species)))
     #deduplicate
-    valid_data = valid_data[!duplicated(valid_data$DateT), ]
+    all_data = all_data[!duplicated(all_data$DateT), ]
     
-    Sharedata = valid_data%>%
+    
+    #clean working variables out for writing output
+    Sharedata = all_data%>%
       dplyr::select(DateT, Species, Latitude, Longitude,Min, Best, Max, Dist, Bearing, Port_Star, Behaviour, 
                     TimeEnd, Pic_no, Comments)
         
     
     #write csv
-    write.csv(Sharedata, file = "data/cetacean_sightings_trip1.csv", row.names = FALSE)
-    write_rds(Sharedata, "data/cetacean_sightings_trip1.rds")
+    write.csv(Sharedata, file = paste0("output/", sheet, Trip, year, ".csv"), row.names = FALSE)
+    write_rds(Sharedata, file = paste0("output/", sheet, Trip, year, ".rds"))
     
 
 
@@ -79,49 +79,47 @@ here::here()
     #uses csv_maker and move.files functions above
 
     sheet = "Environment"
+    original_path <- (here::here("input/originals"))
+    year = 2022
+    Trip = "Arctic_Leg1"
     
-    #2. check list is correct
-    files.to.read 
-    
-    #3. 
+    #read in data files
+    files.to.read = list.files(original_path, pattern="xlsx", full.names = T)
+    #write csvs to same folder
     lapply(files.to.read, csv_maker)
     
-    #4. function to move to new folder
-     
-           #list csvs
-           files.csv = list.files(valid_path, pattern="csv")
-           
-           lapply(files.csv, move.files)
-   
-   # Compile and clean variable data from csv----
+    #Move csvs to new folder
+    files.csv= list.files(original_path, pattern="csv")
+    lapply(files.csv, move.files)
     
-    FILEpath <- (here::here("data/Environment"))
+    # Compile and clean variables from multiple csv data----
     
-    Valid_tables <- list.files(path = FILEpath, pattern = "*.csv", full.names = T)
-    valid_data <- ldply(Valid_tables, read_csv)
+    csv_path <- file.path(paste(here::here(), "/input/",sheet, sep = ""))
     
-    summary(valid_data)
+    all_tables <- list.files(path = csv_path, pattern = "*.csv", full.names = T)
+    all_data <- all_tables%>%map(read_csv)%>%bind_rows()
     
-    # create a tibble for cleaned up validated data 
+    summary(all_data)
+    
+     # create a tibble for cleaned up validated Environment data 
     ###
-    valid_data<-valid_data  %>% # pipe - create a linear sequence of operations 
-      mutate(LatD = as.numeric(str_sub(valid_data$Pos,1,2)))%>%
+    all_data<-all_data  %>% # pipe - create a linear sequence of operations 
+      mutate(LatD = as.numeric(str_sub(all_data$Pos,1,2)))%>%
       
-      mutate(LatM = as.numeric(str_extract(valid_data$Pos,"(?<=d).+(?=N)"))/60)%>%
+      mutate(LatM = as.numeric(str_extract(all_data$Pos,"(?<=d).+(?=N)"))/60)%>%
       mutate(Latitude = LatD+LatM)%>%
-      mutate(LongD = as.numeric(str_extract(valid_data$Pos,"(?<=\\s).+(?=d)")))%>%
-      mutate(LongM = as.numeric(str_extract(valid_data$Pos,"[\\d\\.]+(?=W)"))/60)%>%
+      mutate(LongD = as.numeric(str_extract(all_data$Pos,"(?<=\\s).+(?=d)")))%>%
+      mutate(LongM = as.numeric(str_extract(all_data$Pos,"[\\d\\.]+(?=W)"))/60)%>%
       mutate(Longitude = (LongD+LongM)*-1)
     
     #deduplicate
-    valid_data = valid_data[!duplicated(valid_data$DateT), ]
+    all_data = all_data[!duplicated(all_data$DateT), ]
     
-    Sharedata = valid_data%>%dplyr::select(-Pos, -LatD,-LatM, -LongD, - LongM,)
-    
+    Sharedata = all_data%>%dplyr::select(-Pos, -LatD,-LatM, -LongD, - LongM,)
     
     #write csv
-    write.csv(Sharedata, file = "data/Environment_trip1.csv", row.names = FALSE)
-    write_rds(Sharedata, "data/Environment_trip1.rds")
+    write.csv(Sharedata, file = paste0("output/", sheet, Trip, year, ".csv"), row.names = FALSE)
+    write_rds(Sharedata, file = paste0("output/", sheet, Trip, year, ".rds"))
 
 #### import ship track ####
     cleantrack = function(ship1){
