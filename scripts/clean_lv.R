@@ -1,5 +1,5 @@
 #clean Listview export from NBW dorsal catalogue and format for socprog 
-    #results in sightHa2 data table 
+    #results in sightHa2 input table 
 #this can be run from top to bottom
 
 
@@ -10,7 +10,7 @@ library(tidyr)
 library(readr)
 
 #read in List view csv file
-sightHa2 = read.csv(here::here("data/LV_2022.csv"))
+sightHa2 = read.csv(here::here("input/LV_2022.csv"))
 
 
 
@@ -55,8 +55,8 @@ sightHa2 = sightHa2%>%filter(!is.na(Latitude))
 #make simple version for merging
 sightHa = sightHa2%>%dplyr::select(File.name, QRATE,Date,Longitude, Latitude,
                               )
-write_csv(sightHa,  here::here("data/sightHa_location.csv"))
-write_rds(sightHa, "data/sightHa_location.rds")
+write_csv(sightHa,  here::here("input/sightHa_location.csv"))
+write_rds(sightHa, "input/sightHa_location.rds")
 
 
       
