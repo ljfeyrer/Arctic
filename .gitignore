@@ -1,7 +1,5 @@
 # exclude everything except directory scripts
-    /*
-    !/scripts
-    /scripts/*
+ 
 .gitattributes
 Arctic.Rproj
 .Rproj.user
