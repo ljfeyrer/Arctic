@@ -43,6 +43,27 @@ shapefiles ="~/CODE/shapefiles/"
 # import ship tracks -----------
     ship_2025 = read_sf(here::here("output/Track/ship_track.shp"))%>%st_transform(4326)
 
+#import stations from leg 2 
+Stns_L2_2025 = read.csv(here::here("input/compiled/Track/Stns_2025_leg2.csv"))%>%
+  # fix lat long
+  mutate(
+    Start.Lat.Degree  = as.numeric(Start.Lat.Degree),
+    Start.Lat.Minutes = as.numeric(Start.Lat.Minutes),
+    Start.Long.Degree  = as.numeric(Start.Long.Degree),
+    Start.Long.Minutes = as.numeric(Start.Long.Minutes),
+    End.Lat.Degree  = as.numeric(End.Lat.Degree),
+    End.Lat.Minutes = as.numeric(End.Lat.Minutes),
+    End.Long.Degree  = as.numeric(End.Long.Degree),
+    End.Long.Minutes = as.numeric(End.Long.Minutes),
+    
+    # decimal degrees, N positive, W negative
+    start_lat_dd = Start.Lat.Degree + Start.Lat.Minutes/60,
+    start_lon_dd = -(Start.Long.Degree + Start.Long.Minutes/60),
+    end_lat_dd   = End.Lat.Degree   + End.Lat.Minutes/60,
+    end_lon_dd   = -(End.Long.Degree   + End.Long.Minutes/60),
+    Species = "Northern Bottlenose"
+  )%>%select(Set.Number,Start.Date,Start.Depth,End.Depth,Biopsy,Photos, Species, Whale_min, end_lon_dd, end_lat_dd)%>%
+  st_as_sf(coords=c("end_lon_dd","end_lat_dd"), crs=4326)
 
 
 #read eez shapefile----
@@ -124,8 +145,9 @@ m<-ggplot() +
         ) +
   #add sightings of NBW
    geom_sf(data  = NBW2025, aes(col = Species),  fill = "white", shape = 18, alpha = .5,
-          size = 2) +
-
+          size = 3) +
+  geom_sf(data  = Stns_L2_2025, aes(col = Species),  fill = "white", shape = 18, alpha = .5,
+          size = 3) +
   # set map limits
   coord_sf(lims_method = "orthogonal",
            xlim=lims$x, ylim=lims$y, expand = F
@@ -140,16 +162,16 @@ m<-ggplot() +
 
   #legend
   scale_color_manual(values = cols)+
-  guides(fill = "none", color = guide_legend(override.aes = list(shape = 19, size = 2)))+
+  guides(fill = "none", color = guide_legend(override.aes = list(shape = 18, size = 3)))+
   theme_bw()+
   # format axes
   ylab("") + 
   xlab("") +
   labs(col = "Whale Sightings")+
-  theme(plot.margin = margin(.1, .5, .1, .1, "cm"),
+  theme(plot.margin = margin(.1, .1, .1, .1, "cm"),
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
-       legend.key = element_blank(), legend.position = c(.85,.9) )
+       legend.key = element_blank(), legend.position = c(.74,.9) )
   
 m
 
