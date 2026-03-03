@@ -1,5 +1,5 @@
 # exclude everything except directory scripts
- 
+ *.png
 .gitattributes
 Arctic.Rproj
 .Rproj.user

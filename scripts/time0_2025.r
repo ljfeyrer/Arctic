@@ -6,7 +6,7 @@ library(ggplot2)
 # read the 2025 track file ---------------------------------------
 
 ship_2025 <- read.csv(
-  "input/original_data/Time0/Canada2025_trk.csv",
+  "input/original_data/2025 Canada -Export_trk.csv",
   skip   = 2,      # skip "TK,1,2" and "#Date: ..."
   header = FALSE,
   stringsAsFactors = FALSE
