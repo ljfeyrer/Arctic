@@ -25,6 +25,8 @@
 #   input/basemaps/bathymetry_marmap_res15.csv (0.25-degree global bathymetry grid)
 #   input/basemaps/eez_greenland.json (Greenland EEZ only; no Canada EEZ layer
 #     is available in-repo yet)
+#   input/basemaps/DFO_OECM_MPO_AMCEZ_SHP/ (DFO OECM polygons; only those
+#     intersecting the map extent are drawn)
 #
 # Outputs per year: either "nbw_annual_sightings_<year>_compiled_deduplicated.csv"
 # when no cross-vessel duplicates were found, or the pair
@@ -280,6 +282,7 @@ if (!nrow(map_data)) {
   bathy <- read_bathy(xlim, ylim)
   land <- ne_countries(scale = 50, returnclass = "sf")
   eez <- if (file.exists(eez_path)) st_read(eez_path, quiet = TRUE) %>% st_transform(st_crs(land)) else NULL
+  oecm <- read_oecm_in_extent(xlim, ylim)
 
   # A few, well-spaced axis breaks instead of ggplot's dense defaults, which
   # overlap once squeezed into one of six facet panels.
@@ -297,9 +300,21 @@ if (!nrow(map_data)) {
   fig_height <- 10
   fig_width <- fig_height * panel_aspect * facet_ncol / facet_nrow
 
+  oecm_colour <- "#FFD400"
   facet_map <- ggplot() +
     geom_raster(data = bathy, aes(x = longitude, y = latitude, fill = depth_m)) +
     scale_fill_gradient2(low = "#011f4b", mid = "#a2c0d0", high = "#b3cde0", midpoint = -1000, name = "Depth (m)") +
+    {
+      if (!is.null(oecm) && nrow(oecm)) {
+        # linetype is mapped only to give the polygons their own legend entry;
+        # colour and fill are already used by the vessel and depth scales.
+        geom_sf(
+          data = oecm, aes(linetype = "Marine refuges"),
+          fill = alpha(oecm_colour, oecm_fill_alpha), colour = oecm_colour,
+          linewidth = 0.3, inherit.aes = FALSE
+        )
+      }
+    } +
     {
       if (!is.null(eez)) {
         geom_sf(data = eez, colour = "white", fill = NA, linewidth = 0.4, linetype = "dashed", inherit.aes = FALSE)
@@ -313,6 +328,12 @@ if (!nrow(map_data)) {
     ) +
     scale_shape_manual(values = c(Tarajoq = 16, Kiviuq = 17)) +
     scale_colour_manual(values = c(Tarajoq = "#D55E00", Kiviuq = "#0072B2")) +
+    scale_linetype_manual(
+      values = c("Marine refuges" = "solid"), name = NULL,
+      guide = guide_legend(override.aes = list(
+        fill = alpha(oecm_colour, oecm_fill_alpha), colour = oecm_colour
+      ))
+    ) +
     scale_x_continuous(breaks = x_breaks) +
     scale_y_continuous(breaks = y_breaks) +
     coord_sf(xlim = xlim, ylim = ylim, expand = FALSE) +

@@ -459,6 +459,10 @@ map_path <- file.path(out_dir, "nbw_sightings_compiled_vs_reference_map.png")
 if (nrow(map_data) > 0) {
   date_range <- range(map_data$map_date, na.rm = TRUE)
   map_land <- ne_countries(scale = 50, returnclass = "sf")
+  map_xlim <- range(map_data$longitude, na.rm = TRUE) + c(-1, 1)
+  map_ylim <- range(map_data$latitude, na.rm = TRUE) + c(-1, 1)
+  map_oecm <- read_oecm_in_extent(map_xlim, map_ylim)
+  oecm_colour <- "#2E7D32"
   map_eez <- NULL
   if (file.exists(eez_path)) {
     map_eez <- st_read(eez_path, quiet = TRUE) %>% st_transform(st_crs(map_land))
@@ -467,6 +471,15 @@ if (nrow(map_data) > 0) {
   }
   map_plot <- ggplot() +
     geom_sf(data = map_land, fill = "grey88", color = "grey55", linewidth = 0.25) +
+    {
+      if (!is.null(map_oecm) && nrow(map_oecm)) {
+        geom_sf(
+          data = map_oecm, aes(linetype = "Marine refuges"),
+          fill = alpha(oecm_colour, oecm_fill_alpha), color = oecm_colour,
+          linewidth = 0.3, inherit.aes = FALSE
+        )
+      }
+    } +
     {
       if (!is.null(map_eez)) {
         geom_sf(
@@ -480,9 +493,15 @@ if (nrow(map_data) > 0) {
       alpha = 0.6, size = 1.3
     ) +
     coord_sf(
-      xlim = range(map_data$longitude, na.rm = TRUE) + c(-1, 1),
-      ylim = range(map_data$latitude, na.rm = TRUE) + c(-1, 1),
+      xlim = map_xlim,
+      ylim = map_ylim,
       expand = FALSE
+    ) +
+    scale_linetype_manual(
+      values = c("Marine refuges" = "solid"), name = NULL,
+      guide = guide_legend(override.aes = list(
+        fill = alpha(oecm_colour, oecm_fill_alpha), colour = oecm_colour
+      ))
     ) +
     labs(
       title = "NBW sightings: compiled field data vs. reference databases",

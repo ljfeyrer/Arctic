@@ -122,3 +122,32 @@ group_into_encounters <- function(datetime, gap_minutes = 30) {
   new_encounter <- seq_along(datetime) == 1 | gap > gap_minutes
   cumsum(new_encounter)
 }
+
+# ---- MAP LAYERS -------------------------------------------------------------
+
+# DFO "other effective area-based conservation measures" (OECMs: marine
+# refuges and similar closures). Returns, in longitude/latitude, only the
+# polygons that intersect the map extent given by `xlim`/`ylim` -- whole
+# polygons, not clipped, so the map's own limits do the cropping. Returns
+# NULL when the shapefile is absent, so a map still draws without it.
+# Needs the sf package, which is only loaded by the scripts that draw maps.
+oecm_fill_alpha <- 0.25
+
+read_oecm_in_extent <- function(xlim, ylim,
+                                path = "input/basemaps/DFO_OECM_MPO_AMCEZ_SHP/DFO_OECM_MPO_AMCEZ.shp") {
+  if (!file.exists(path)) {
+    message("OECM shapefile not found at ", path, "; map drawn without it.")
+    return(NULL)
+  }
+  # Planar test on lon/lat: several of these polygons are not valid on the
+  # sphere, and the extent is a simple lon/lat rectangle anyway.
+  old_s2 <- suppressMessages(sf::sf_use_s2(FALSE))
+  on.exit(suppressMessages(sf::sf_use_s2(old_s2)), add = TRUE)
+  oecm <- sf::st_make_valid(sf::st_transform(sf::st_read(path, quiet = TRUE), 4326))
+  extent <- sf::st_as_sfc(sf::st_bbox(
+    c(xmin = min(xlim), xmax = max(xlim), ymin = min(ylim), ymax = max(ylim)),
+    crs = 4326
+  ))
+  keep <- suppressMessages(lengths(sf::st_intersects(oecm, extent)) > 0)
+  oecm[keep, ]
+}
