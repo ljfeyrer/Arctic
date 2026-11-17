@@ -10,3 +10,5 @@ FIGS**
 shapes**
 .DS_Store
 .positai
+*.wdp
+/presentation_assets
