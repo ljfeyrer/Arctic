@@ -5,11 +5,20 @@
 #
 # !/usr/bin/env Rscript
 
-# Compile and deduplicate normalized Tarajoq NBW sightings.
+# Compile and deduplicate normalized Tarajoq NBW sightings, writing to
+# output/Cetaceans/ (one vessel/program's sightings, alongside its
+# Environment and Biopsy form data -- see 08_compile_environment_biopsy.R).
 # Kiviuq and original workbooks are excluded. Normalized Tarajoq station
 # sightings are included when present; files removed from normalized are not
 # discovered or compiled.
 # Original and normalized source files are never modified.
+#
+# Output per year: either "tarajoq_nbw_sightings_<year>_compiled_deduplicated.csv"
+# when no duplicates were found, or the pair
+# "tarajoq_nbw_sightings_<year>_{compiled,deduplicated}.csv" when some
+# records were flagged and omitted (see write_compiled_dedup() in
+# scripts/lib/helpers.R). 06_merge_annual_sightings.R reads whichever exists
+# via resolve_dedup_file().
 
 suppressPackageStartupMessages({
   library(dplyr)
@@ -136,8 +145,13 @@ find_candidates <- function(data) {
   pairs
 }
 
+# Tarajoq-only compiled sightings are one source feeding the merged,
+# all-sources product in output/Sightings/ (see 06_merge_annual_sightings.R)
+# -- they live under output/Cetaceans/ alongside the normalized Environment
+# and Biopsy form data, so output/Sightings/ stays reserved for the merge
+# across vessels/programs and the cross-reference-database result.
 priority <- c(form = 1L, station = 2L, field_note = 3L, photo_id = 4L)
-out_root <- "output/Sightings"
+out_root <- "output/Cetaceans"
 qa_root <- "output/Sightings_QA"
 dir.create(out_root, recursive = TRUE, showWarnings = FALSE)
 dir.create(qa_root, recursive = TRUE, showWarnings = FALSE)
@@ -210,12 +224,9 @@ for (year in years) {
     compiled$dedup_status[keep] <- "retained_duplicate_representative"
   }
 
-  compiled_file <- file.path(out_root, paste0("tarajoq_nbw_sightings_", year, "_compiled.csv"))
-  dedup_file <- file.path(out_root, paste0("tarajoq_nbw_sightings_", year, "_deduplicated.csv"))
   candidate_file <- file.path(qa_root, paste0("tarajoq_nbw_sightings_", year, "_duplicate_candidates.csv"))
   audit_file <- file.path(qa_root, paste0("tarajoq_nbw_sightings_", year, "_deduplication_audit.csv"))
-  write_csv(compiled, compiled_file, na = "")
-  write_csv(compiled %>% filter(retained), dedup_file, na = "")
+  write_compiled_dedup(compiled, out_root, "tarajoq_nbw_sightings", year)
   write_csv(candidates, candidate_file, na = "")
   write_csv(compiled %>% count(source_type, retained, dedup_status, name = "records"), audit_file, na = "")
   message(

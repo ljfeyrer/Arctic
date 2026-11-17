@@ -114,16 +114,69 @@ normalize_file <- function(path) {
   )
 }
 
-files <- list.files(root,
+# Hand-transcribed raw field notes (e.g. a text message or note received
+# before any spreadsheet export exists for that year) live alongside the
+# normalized sightings at
+# input/normalized/<year>/sightings/kiviuq_fieldnotes_<year>_transcription.csv
+# with columns note_row, date_raw, standard_date, latitude_raw,
+# longitude_raw, latitude, longitude, count, notes, source_file. They are
+# combined into the same per-year output as the Arctic_<year>.xlsx sheets,
+# with coordinate_source flagged as approximate (hand-estimated positions,
+# not a logged GPS fix).
+read_fieldnote_transcription <- function(year) {
+  path <- file.path(out_root, year, "sightings", paste0("kiviuq_fieldnotes_", year, "_transcription.csv"))
+  if (!file.exists(path)) {
+    return(tibble())
+  }
+  raw <- read_csv(path, col_types = cols(.default = col_character()), show_col_types = FALSE)
+  tibble(
+    record_id = paste0(year, "_kiviuq_fieldnote_", raw$note_row),
+    source_family = "Kiviuq",
+    source_year = as.integer(year),
+    survey_leg = NA_character_,
+    standard_datetime = as.POSIXct(NA_real_, tz = "UTC"),
+    standard_date = as.Date(raw$standard_date),
+    standard_time = NA_character_,
+    datetime_precision = "date_only",
+    latitude = as_num(raw$latitude),
+    longitude = as_num(raw$longitude),
+    count = as_num(raw$count),
+    species = "Northern Bottlenose Whale",
+    sample_id = NA_character_,
+    source_file = raw$source_file,
+    source_sheet = "field_note",
+    source_row = raw$note_row,
+    coordinate_source = paste0(
+      "field note (approximate position: ", raw$latitude_raw, ", ", raw$longitude_raw, ")"
+    ),
+    comments = raw$notes
+  )
+}
+
+xlsx_files <- list.files(root,
   pattern = "^Arctic_[0-9]{4}[.]xlsx$", recursive = TRUE,
   full.names = TRUE, ignore.case = TRUE
 )
-files <- files[str_detect(files, "/kiviuq/cetacean_sightings/")]
-if (length(files) == 0) stop("No Kiviuq Arctic_<year>.xlsx files found")
+# Most years file this under kiviuq/cetacean_sightings/, but 2023's workbook
+# sits directly under kiviuq/ instead -- match on the unambiguous
+# Arctic_<year>.xlsx filename and just require a /kiviuq/ ancestor folder, so
+# that inconsistency doesn't silently drop a year.
+xlsx_files <- xlsx_files[str_detect(xlsx_files, "/kiviuq/")]
+xlsx_years <- str_extract(basename(xlsx_files), "[0-9]{4}")
 
-for (path in files) {
-  year <- str_extract(basename(path), "[0-9]{4}")
-  data <- normalize_file(path)
+fieldnote_years <- list.dirs(root, recursive = FALSE, full.names = FALSE) %>%
+  str_subset("^[0-9]{4}$") %>%
+  keep(~ file.exists(file.path(out_root, .x, "sightings", paste0("kiviuq_fieldnotes_", .x, "_transcription.csv"))))
+
+years <- sort(union(xlsx_years, fieldnote_years))
+if (length(years) == 0) stop("No Kiviuq Arctic_<year>.xlsx files or field-note transcriptions found")
+
+for (year in years) {
+  xlsx_path <- xlsx_files[xlsx_years == year]
+  data <- bind_rows(
+    if (length(xlsx_path)) normalize_file(xlsx_path[1]) else tibble(),
+    read_fieldnote_transcription(year)
+  )
   out_dir <- file.path(out_root, year, "sightings")
   dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
   out_file <- file.path(out_dir, paste0("kiviuq_sightings_", year, "_standardized.csv"))

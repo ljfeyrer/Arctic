@@ -10,22 +10,26 @@
 # shape/colour by vessel, for QA review and reuse as a presentation figure.
 #
 # This step must run after 03_compile_normalized_tarajoq_sightings.R (for the
-# Tarajoq side) and 02_normalize_kiviuq_sightings.R (for the Kiviuq side), and
-# before 07_crossref_compiled_against_reference_dbs.R, which now reads this
-# script's _deduplicated.csv output instead of the Tarajoq-only one. A year
-# with only one vessel's data (e.g. 2018 Kiviuq-only, 2025 Tarajoq-only) is
-# handled -- the other side just contributes zero rows.
+# Tarajoq side, under output/Cetaceans/) and 02_normalize_kiviuq_sightings.R
+# (for the Kiviuq side), and before 07_crossref_compiled_against_reference_dbs.R,
+# which now reads this script's output instead of the Tarajoq-only one.
+# output/Sightings/ is reserved for this merge-across-sources result and the
+# reference-database cross-reference -- the single-vessel/program compiled
+# sightings live under output/Cetaceans/ instead. A year with only one
+# vessel's data (e.g. 2018 Kiviuq-only, 2025 Tarajoq-only) is handled -- the
+# other side just contributes zero rows.
 #
 # Inputs (never modified):
-#   output/Sightings/tarajoq_nbw_sightings_<year>_deduplicated.csv
+#   output/Cetaceans/tarajoq_nbw_sightings_<year>_{compiled_deduplicated,deduplicated}.csv
 #   input/normalized/<year>/sightings/kiviuq_sightings_<year>_standardized.csv
-#   input/marmap_coord_bathy_res_15.csv (0.25-degree global bathymetry grid)
-#   input/basemaps_eez_greenland.json (Greenland EEZ only; no Canada EEZ layer
+#   input/basemaps/bathymetry_marmap_res15.csv (0.25-degree global bathymetry grid)
+#   input/basemaps/eez_greenland.json (Greenland EEZ only; no Canada EEZ layer
 #     is available in-repo yet)
 #
-# Outputs:
-#   output/Sightings/nbw_annual_sightings_<year>_compiled.csv
-#   output/Sightings/nbw_annual_sightings_<year>_deduplicated.csv
+# Outputs per year: either "nbw_annual_sightings_<year>_compiled_deduplicated.csv"
+# when no cross-vessel duplicates were found, or the pair
+# "nbw_annual_sightings_<year>_{compiled,deduplicated}.csv" when some were
+# (see write_compiled_dedup() in scripts/lib/helpers.R). Also:
 #   output/Sightings_QA/nbw_annual_sightings_<year>_duplicate_candidates.csv
 #   output/Sightings_QA/nbw_annual_sightings_<year>_deduplication_audit.csv
 #   output/FIGS/nbw_annual_sightings_by_year_bathymetry.png
@@ -39,6 +43,7 @@ suppressPackageStartupMessages({
   library(ggplot2)
   library(sf)
   library(rnaturalearth)
+  library(terra)
 })
 
 source("scripts/lib/helpers.R")
@@ -47,17 +52,21 @@ nbw_species_regex <- "northern bottlenose|northen bottlenose|bottlenose whale|\\
 
 year_arg <- get_arg("year", "all")
 
-compiled_root <- "output/Sightings"
+cetaceans_root <- "output/Cetaceans"
+sightings_root <- "output/Sightings"
 normalized_root <- "input/normalized"
 qa_root <- "output/Sightings_QA"
 figs_root <- "output/FIGS"
-bathy_path <- "input/marmap_coord_bathy_res_15.csv"
-eez_path <- "input/basemaps_eez_greenland.json"
-dir.create(compiled_root, recursive = TRUE, showWarnings = FALSE)
+bathy_path <- "input/basemaps/bathymetry_marmap_res15.csv"
+eez_path <- "input/basemaps/eez_greenland.json"
+dir.create(sightings_root, recursive = TRUE, showWarnings = FALSE)
 dir.create(qa_root, recursive = TRUE, showWarnings = FALSE)
 dir.create(figs_root, recursive = TRUE, showWarnings = FALSE)
 
-tarajoq_years <- list.files(compiled_root, pattern = "^tarajoq_nbw_sightings_[0-9]{4}_deduplicated\\.csv$") %>%
+tarajoq_years <- list.files(
+  cetaceans_root,
+  pattern = "^tarajoq_nbw_sightings_[0-9]{4}_(compiled_deduplicated|deduplicated)\\.csv$"
+) %>%
   str_extract("[0-9]{4}") %>%
   as.integer()
 kiviuq_years <- list.files(file.path(normalized_root), pattern = "^[0-9]{4}$") %>%
@@ -76,8 +85,8 @@ if (!length(years)) stop("No Tarajoq-compiled or Kiviuq-normalized years found."
 # source_row, source_comments, source_path.
 
 read_tarajoq_side <- function(year) {
-  path <- file.path(compiled_root, paste0("tarajoq_nbw_sightings_", year, "_deduplicated.csv"))
-  if (!file.exists(path)) {
+  path <- resolve_dedup_file(cetaceans_root, "tarajoq_nbw_sightings", year)
+  if (is.na(path)) {
     return(tibble())
   }
   read_csv(path, col_types = cols(.default = col_character()), show_col_types = FALSE) %>%
@@ -212,12 +221,9 @@ for (year in years) {
     combined$dedup_status[keep] <- "retained_duplicate_representative"
   }
 
-  compiled_file <- file.path(compiled_root, paste0("nbw_annual_sightings_", year, "_compiled.csv"))
-  dedup_file <- file.path(compiled_root, paste0("nbw_annual_sightings_", year, "_deduplicated.csv"))
   candidate_file <- file.path(qa_root, paste0("nbw_annual_sightings_", year, "_duplicate_candidates.csv"))
   audit_file <- file.path(qa_root, paste0("nbw_annual_sightings_", year, "_deduplication_audit.csv"))
-  write_csv(combined, compiled_file, na = "")
-  write_csv(combined %>% filter(retained), dedup_file, na = "")
+  write_compiled_dedup(combined, sightings_root, "nbw_annual_sightings", year)
   write_csv(candidates, candidate_file, na = "")
   write_csv(combined %>% count(vessel, retained, dedup_status, name = "records"), audit_file, na = "")
 
@@ -235,14 +241,25 @@ map_data <- bind_rows(all_years_dedup) %>%
   filter(!is.na(latitude), !is.na(longitude))
 
 map_path <- file.path(figs_root, "nbw_annual_sightings_by_year_bathymetry.png")
-if (!nrow(map_data)) {
-  message("No valid coordinates available across merged years; map not written.")
-} else {
-  pad <- 1
-  xlim <- range(map_data$longitude, na.rm = TRUE) + c(-pad, pad)
-  ylim <- range(map_data$latitude, na.rm = TRUE) + c(-pad, pad)
+# Higher-resolution bathymetry (15 arc-second GEBCO 2020), matching the one
+# used in scripts/legacy/baseMap_arctic_2025.R for output/FIGS/NBW_Sightings2025.png.
+# This path is a personal, machine-specific location outside the repo, so a
+# year with no access to it falls back to the coarser in-repo 0.25-degree
+# grid at bathy_path instead of failing.
+bathy_hires_path <- path.expand("~/CODE/shapefiles/Bathymetry/GEBCO_bathy/gebco_2020.tif")
 
-  bathy <- read_csv(bathy_path,
+read_bathy <- function(xlim, ylim) {
+  if (file.exists(bathy_hires_path)) {
+    message("Using high-resolution GEBCO bathymetry: ", bathy_hires_path)
+    r <- terra::rast(bathy_hires_path)
+    r <- terra::crop(r, terra::ext(xlim[1], xlim[2], ylim[1], ylim[2]))
+    r <- terra::aggregate(r, fact = 3, fun = "mean")
+    out <- as.data.frame(r, xy = TRUE)
+    names(out) <- c("longitude", "latitude", "depth_m")
+    return(filter(out, depth_m < -10))
+  }
+  message("GEBCO raster not found at ", bathy_hires_path, "; using the in-repo 0.25-degree grid instead.")
+  read_csv(bathy_path,
     skip = 1, col_names = c("longitude", "latitude", "depth_m"),
     col_types = "ddd", show_col_types = FALSE
   ) %>%
@@ -251,9 +268,34 @@ if (!nrow(map_data)) {
       latitude >= ylim[1], latitude <= ylim[2],
       depth_m < -10
     )
+}
 
+if (!nrow(map_data)) {
+  message("No valid coordinates available across merged years; map not written.")
+} else {
+  pad <- 1
+  xlim <- range(map_data$longitude, na.rm = TRUE) + c(-pad, pad)
+  ylim <- range(map_data$latitude, na.rm = TRUE) + c(-pad, pad)
+
+  bathy <- read_bathy(xlim, ylim)
   land <- ne_countries(scale = 50, returnclass = "sf")
   eez <- if (file.exists(eez_path)) st_read(eez_path, quiet = TRUE) %>% st_transform(st_crs(land)) else NULL
+
+  # A few, well-spaced axis breaks instead of ggplot's dense defaults, which
+  # overlap once squeezed into one of six facet panels.
+  x_breaks <- pretty(xlim, n = 3)
+  y_breaks <- pretty(ylim, n = 4)
+
+  # Size the output so each panel's plotted width:height matches the true
+  # geographic aspect (longitude degrees scaled by cos(latitude) vs. latitude
+  # degrees). Without this, coord_sf's fixed aspect pads equal whitespace on
+  # either side of every panel to fit a wide grid cell.
+  n_facets <- n_distinct(map_data$source_year)
+  facet_ncol <- 3
+  facet_nrow <- ceiling(n_facets / facet_ncol)
+  panel_aspect <- (diff(xlim) * cos(mean(ylim) * pi / 180)) / diff(ylim)
+  fig_height <- 10
+  fig_width <- fig_height * panel_aspect * facet_ncol / facet_nrow
 
   facet_map <- ggplot() +
     geom_raster(data = bathy, aes(x = longitude, y = latitude, fill = depth_m)) +
@@ -271,15 +313,17 @@ if (!nrow(map_data)) {
     ) +
     scale_shape_manual(values = c(Tarajoq = 16, Kiviuq = 17)) +
     scale_colour_manual(values = c(Tarajoq = "#D55E00", Kiviuq = "#0072B2")) +
+    scale_x_continuous(breaks = x_breaks) +
+    scale_y_continuous(breaks = y_breaks) +
     coord_sf(xlim = xlim, ylim = ylim, expand = FALSE) +
-    facet_wrap(~source_year) +
+    facet_wrap(~source_year, ncol = facet_ncol) +
     labs(
-      title = "NBW sightings by year", subtitle = "Tarajoq (field-form compiled) vs. Kiviuq",
+      title = "NBW sightings by year", subtitle = "Fishery survey field observations",
       x = NULL, y = NULL, shape = "Vessel", colour = "Vessel"
     ) +
     theme_minimal(base_size = 10) +
     theme(legend.position = "bottom", panel.grid = element_blank())
 
-  ggsave(map_path, facet_map, width = 11, height = 9, units = "in", dpi = 220)
+  ggsave(map_path, facet_map, width = fig_width, height = fig_height + 1.3, units = "in", dpi = 220, limitsize = FALSE)
   message("Annual bathymetry facet map written to: ", map_path)
 }

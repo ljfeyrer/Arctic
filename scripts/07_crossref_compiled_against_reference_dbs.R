@@ -13,15 +13,15 @@
 #
 # This step does not depend on which field-data years have been compiled.
 # Run with --year=all (default) to pick up whatever
-# output/Sightings/nbw_annual_sightings_<year>_deduplicated.csv files exist
-# at the time, or --year=YYYY for one year. Re-run any time a new year is
-# merged or a reference database is updated. Must run after
-# 06_merge_annual_sightings.R (which must itself run after
-# 03_compile_normalized_tarajoq_sightings.R and
+# output/Sightings/nbw_annual_sightings_<year>_{compiled_deduplicated,deduplicated}.csv
+# files exist at the time (see resolve_dedup_file() in scripts/lib/helpers.R),
+# or --year=YYYY for one year. Re-run any time a new year is merged or a
+# reference database is updated. Must run after 06_merge_annual_sightings.R
+# (which must itself run after 03_compile_normalized_tarajoq_sightings.R and
 # 02_normalize_kiviuq_sightings.R).
 #
 # Inputs (never modified):
-#   output/Sightings/nbw_annual_sightings_<year>_deduplicated.csv
+#   output/Sightings/nbw_annual_sightings_<year>_{compiled_deduplicated,deduplicated}.csv
 #   input/reference/database_collated/DFO_NBW_Oct2026.xlsx
 #   input/reference/database_collated/Greenland_NBW_Oct2026.xlsx
 #   input/reference/database_collated/allnbwobs_paamiut_260522.csv
@@ -62,7 +62,7 @@ compiled_root <- "output/Sightings"
 reference_root <- "input/reference/database_collated"
 out_dir <- "output/Sightings"
 qa_dir <- "output/Sightings_QA"
-eez_path <- "input/basemaps_eez_greenland.json"
+eez_path <- "input/basemaps/eez_greenland.json"
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 dir.create(qa_dir, recursive = TRUE, showWarnings = FALSE)
 
@@ -71,7 +71,7 @@ nbw_species_regex <- "northern bottlenose|northen bottlenose|bottlenose whale|\\
 # ---- DISCOVER COMPILED FIELD-DATA YEARS ------------------------------------
 
 compiled_files <- list.files(compiled_root,
-  pattern = "^nbw_annual_sightings_[0-9]{4}_deduplicated\\.csv$"
+  pattern = "^nbw_annual_sightings_[0-9]{4}_(compiled_deduplicated|deduplicated)\\.csv$"
 )
 available_years <- as.integer(str_extract(compiled_files, "[0-9]{4}"))
 years <- if (year_arg == "all") sort(available_years) else as.integer(year_arg)
@@ -85,7 +85,7 @@ if (!length(years)) {
 message("Cross-referencing merged annual year(s): ", paste(years, collapse = ", "))
 
 compiled <- map_dfr(years, function(yr) {
-  read_csv(file.path(compiled_root, paste0("nbw_annual_sightings_", yr, "_deduplicated.csv")),
+  read_csv(resolve_dedup_file(compiled_root, "nbw_annual_sightings", yr),
     col_types = cols(.default = col_character()), show_col_types = FALSE
   )
 }) %>%

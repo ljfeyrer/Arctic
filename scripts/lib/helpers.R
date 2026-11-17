@@ -76,6 +76,41 @@ haversine_m <- function(lat1, lon1, lat2, lon2) {
   6371008.8 * 2 * atan2(sqrt(a), sqrt(1 - a))
 }
 
+# ---- COMPILED/DEDUPLICATED OUTPUT -------------------------------------------
+# Shared by the compile-style scripts (03_compile_normalized_tarajoq_sightings.R,
+# 06_merge_annual_sightings.R), which each compute a `dedup_group_id` and
+# `retained` column the same way: when nothing was flagged as a duplicate for
+# a year, write one "<prefix>_<year>_compiled_deduplicated.csv" instead of two
+# identical-looking files; when something was removed, write the full
+# "<prefix>_<year>_compiled.csv" audit trail alongside the retained-only
+# "<prefix>_<year>_deduplicated.csv".
+
+write_compiled_dedup <- function(data, dir, prefix, year) {
+  dir.create(dir, recursive = TRUE, showWarnings = FALSE)
+  if (all(is.na(data$dedup_group_id))) {
+    readr::write_csv(data, file.path(dir, paste0(prefix, "_", year, "_compiled_deduplicated.csv")), na = "")
+  } else {
+    readr::write_csv(data, file.path(dir, paste0(prefix, "_", year, "_compiled.csv")), na = "")
+    readr::write_csv(
+      dplyr::filter(data, retained),
+      file.path(dir, paste0(prefix, "_", year, "_deduplicated.csv")),
+      na = ""
+    )
+  }
+}
+
+# Finds whichever of the two possible outputs of write_compiled_dedup() exists
+# for one year: the single compiled_deduplicated file, or (when duplicates
+# were found and removed) the deduplicated file. Returns NA_character_ if
+# neither exists.
+resolve_dedup_file <- function(dir, prefix, year) {
+  candidates <- file.path(dir, paste0(
+    prefix, "_", year, c("_compiled_deduplicated.csv", "_deduplicated.csv")
+  ))
+  hit <- candidates[file.exists(candidates)]
+  if (length(hit) == 0) NA_character_ else hit[[1]]
+}
+
 # ---- ENCOUNTER GROUPING -----------------------------------------------------
 
 # Assigns a sequential encounter number to events sorted ascending by

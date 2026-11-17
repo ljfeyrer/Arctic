@@ -52,11 +52,8 @@ source_candidates <- file.path(
   )
 )
 source_file <- source_candidates[file.exists(source_candidates)][1]
-compiled_file <- file.path(
-  "output", "Sightings",
-  paste0("tarajoq_nbw_sightings_", year, "_deduplicated.csv")
-)
-if (!file.exists(source_file) || !file.exists(compiled_file)) stop("Missing source or compiled file")
+compiled_file <- resolve_dedup_file("output/Cetaceans", "tarajoq_nbw_sightings", year)
+if (is.na(source_file) || is.na(compiled_file)) stop("Missing source or compiled file")
 
 raw <- read_excel(source_file, sheet = 1, col_types = "text")
 datetime_fields <- c("timestamp", "Enc_start", "DateT_UTC", "DateT", "Local_Time", "DateT_local")
