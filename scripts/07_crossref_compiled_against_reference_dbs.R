@@ -66,6 +66,49 @@ eez_path <- "input/basemaps/eez_greenland.json"
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 dir.create(qa_dir, recursive = TRUE, showWarnings = FALSE)
 
+# Local coastline shapefile (same one scripts/lib/arctic_basemap.R and the
+# single-panel map in 06_merge_annual_sightings.R use), to flag reference
+# records whose coordinate sits on land -- mainly useful for the Greenland
+# database's "Catch" records, where a land coordinate is almost always the
+# landing/reporting settlement rather than the animal's at-sea location
+# when it was taken.
+land_shapefile_path <- file.path(
+  path.expand(Sys.getenv("ARCTIC_BASEMAP_DIR", "~/CODE/shapefiles")),
+  "coastline/worldcountries/ne_50m_admin_0_countries.shp"
+)
+land_sf <- if (file.exists(land_shapefile_path)) {
+  st_read(land_shapefile_path, quiet = TRUE) %>% filter(CONTINENT == "North America")
+} else {
+  message("Local coastline shapefile not found at ", land_shapefile_path, "; coordinate_on_land will be NA.")
+  NULL
+}
+
+coordinate_on_land <- function(lat, lon) {
+  out <- rep(NA, length(lat))
+  if (is.null(land_sf)) {
+    return(out)
+  }
+  ok <- !is.na(lat) & !is.na(lon)
+  if (any(ok)) {
+    pts <- st_as_sf(data.frame(lat = lat[ok], lon = lon[ok]), coords = c("lon", "lat"), crs = 4326)
+    out[ok] <- lengths(st_intersects(pts, land_sf)) > 0
+  }
+  out
+}
+
+# DFO and Paamiut are both sightings databases with no catch/mortality
+# concept of their own, so a record defaults to "alive" there unless its
+# free-text comments say otherwise. Checked against DFO's real comments
+# (2026-11-17): "bycatch", "entangled", and "floating" all turned out to
+# describe live animals (following a boat for discarded bycatch fish, an
+# entangled whale released unharmed, fish floating) and are deliberately
+# left out of this list to avoid false "dead" calls.
+dead_comment_regex <- "dead|carcass|stranded|stranding|deceased|necropsy|decompos|mortalit"
+
+status_from_comments <- function(comments) {
+  if_else(str_detect(str_to_lower(coalesce(comments, "")), dead_comment_regex), "dead", "alive")
+}
+
 nbw_species_regex <- "northern bottlenose|northen bottlenose|bottlenose whale|\\bnbw\\b"
 
 # ---- DISCOVER COMPILED FIELD-DATA YEARS ------------------------------------
@@ -131,15 +174,20 @@ read_dfo_reference <- function(path) {
       ref_longitude = as_num(LONGITUDE),
       ref_count = as_num(BEST_COUNT),
       ref_species_raw = COMMONNAME,
+      ref_status = status_from_comments(paste(COMMENTS, COMMENTS_1)),
+      ref_on_land = NA,
       ref_comments = COMMENTS,
       ref_source_file = basename(path)
     )
 }
 
 read_greenland_reference <- function(path) {
-  # event_date mixes Excel-serial day numbers (stored as text) with season
-  # placeholders such as "Summer"; those have no day-level date, so ref_date
-  # is left NA and the record's `year` column is kept in ref_date_precision
+  # event_date mixes Excel-serial day numbers (stored as text), ISO date
+  # strings ("2025-11-23"), one two-day ISO range ("1971-06-26-1971-06-27",
+  # a NAMMCO working-paper citation -- its first day is used, flagged as
+  # "day_range_first_day" below), and true day-unknown placeholders ("NA",
+  # "Summer"); only those last two have no day-level date, so ref_date is
+  # left NA and the record's `year` column is kept in ref_date_precision
   # instead. time_local has no stated UTC offset, so it is never used to
   # build ref_datetime -- it is kept only for audit, in ref_comments. Every
   # Greenland record therefore matches on date + coordinates only (the
@@ -148,21 +196,43 @@ read_greenland_reference <- function(path) {
   # filter on here.
   raw <- read_excel(path, sheet = "Sheet1", col_types = "text") %>%
     mutate(ref_source_row = row_number())
-  event_date_num <- suppressWarnings(as.numeric(na_text(raw$event_date)))
+  event_date_text <- na_text(raw$event_date)
+  event_date_num <- suppressWarnings(as.numeric(event_date_text))
+  is_range <- is.na(event_date_num) & grepl("^[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{4}-[0-9]{2}-[0-9]{2}$", event_date_text)
+  is_iso <- is.na(event_date_num) & !is_range & grepl("^[0-9]{4}-[0-9]{2}-[0-9]{2}$", event_date_text)
+  # Named .ref_event_date (not event_date) so transmute()'s data-masking
+  # doesn't shadow it with raw's own same-named event_date column below.
+  .ref_event_date <- as.Date(rep(NA_character_, nrow(raw)))
+  .ref_event_date[!is.na(event_date_num)] <- as.Date(event_date_num[!is.na(event_date_num)], origin = "1899-12-30")
+  .ref_event_date[is_iso] <- as.Date(event_date_text[is_iso])
+  .ref_event_date[is_range] <- as.Date(substr(event_date_text[is_range], 1, 10))
   transmute(
     raw,
     ref_source_db = "Greenland",
     ref_source_row,
     ref_record_id = coalesce(na_text(record_id), as.character(ref_source_row)),
     ref_datetime = as.POSIXct(NA_real_, tz = "UTC"),
-    ref_date = as.Date(event_date_num, origin = "1899-12-30"),
-    ref_date_precision = if_else(is.na(event_date_num),
-      paste0("year_only:", na_text(year)), "day"
+    ref_date = .ref_event_date,
+    ref_date_precision = case_when(
+      is_range ~ "day_range_first_day",
+      !is.na(.ref_event_date) ~ "day",
+      TRUE ~ paste0("year_only:", na_text(year))
     ),
     ref_latitude = as_num(decimal_latitude),
     ref_longitude = as_num(decimal_longitude),
     ref_count = coalesce(as_num(minimum_group_size), as_num(Catch_total)),
     ref_species_raw = "Northern Bottlenose Whale",
+    # record_type_detail is "Sighting", "Aerial sighting", or "Catch" (a
+    # hunted/landed animal). coordinate_on_land flags a Catch coordinate
+    # that falls on land -- almost always the settlement where the catch
+    # was reported, not where the animal was alive in the water; a Catch
+    # coordinate at sea is a plausible at-sea take location.
+    ref_status = case_when(
+      na_text(record_type_detail) == "Catch" ~ "dead",
+      na_text(record_type_detail) %in% c("Sighting", "Aerial sighting") ~ "alive",
+      TRUE ~ NA_character_
+    ),
+    ref_on_land = coordinate_on_land(as_num(decimal_latitude), as_num(decimal_longitude)),
     ref_comments = paste0(
       coalesce(na_text(original_comments), ""),
       " | time_local (no UTC offset, not used for matching): ",
@@ -187,6 +257,9 @@ read_paamiut_reference <- function(path) {
       ref_longitude = as_num(Long),
       ref_count = as_num(Count),
       ref_species_raw = Species,
+      # No comments column in this source to check for a death note.
+      ref_status = "alive",
+      ref_on_land = NA,
       ref_comments = NA_character_,
       ref_source_file = basename(path)
     )
@@ -420,7 +493,10 @@ compiled_deduplicated <- compiled %>%
     source_detail = compiled_source_type,
     source_file = compiled_source_file,
     source_row = compiled_source_row,
-    deduplication_status = "retained_field_compiled_no_reference_duplicate"
+    deduplication_status = "retained_field_compiled_no_reference_duplicate",
+    # Our own field sightings/tags/biopsies are all from live animals.
+    animal_status = "alive",
+    coordinate_on_land = NA
   )
 
 reference_retained <- reference %>%
@@ -439,7 +515,10 @@ reference_retained <- reference %>%
     source_detail = ref_date_precision,
     source_file = ref_source_file,
     source_row = as.character(ref_source_row),
-    deduplication_status = "retained_reference_database_record"
+    deduplication_status = "retained_reference_database_record",
+    # NA for DFO/Paamiut, which have no alive/dead or land/sea distinction.
+    animal_status = ref_status,
+    coordinate_on_land = ref_on_land
   )
 
 deduplicated_combined <- bind_rows(reference_retained, compiled_deduplicated) %>%

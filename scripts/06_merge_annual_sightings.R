@@ -458,7 +458,13 @@ if (!nrow(map_data)) {
       labs(title = paste0(
         "NBW field sightings, ", min(nbw_map_data$source_year), "-", max(nbw_map_data$source_year)
       )) +
-      theme(plot.title = element_text(face = "bold", size = 12)) +
+      theme(
+        plot.title = element_text(face = "bold", size = 12),
+        legend.title = element_text(size = 8),
+        legend.text = element_text(size = 7),
+        legend.key.size = unit(0.35, "cm"),
+        legend.spacing.y = unit(1, "pt")
+      ) +
       basemap$extent
     # Same size as the photo-ID sightings map.
     ggsave(single_map_path, single_map, width = 5, height = 7, units = "in", dpi = 300)
