@@ -21,7 +21,7 @@ suppressPackageStartupMessages({
 
 source("scripts/lib/helpers.R")
 
-photo_file <- "input/orig_data/2023/photo_id/List View Leg2_2023.csv"
+photo_file <- "input/orig_data/2023/LV/List View Leg2_2023.csv"
 cetacean_file <- "input/orig_data/2023/sightings_original/Cetaceans_Arctic2023.xlsx"
 out_dir <- "input/normalized/2023/sightings"
 qa_dir <- "output/Sightings_QA"

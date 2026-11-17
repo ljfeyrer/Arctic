@@ -20,7 +20,7 @@ suppressPackageStartupMessages({
 source("scripts/lib/helpers.R")
 
 source_path <- "input/orig_data/2023/sightings_original/Cetaceans_Arctic2023.xlsx"
-photo_path <- "input/orig_data/2023/photo_id/List View Leg2_2023.csv"
+photo_path <- "input/orig_data/2023/LV/List View Leg2_2023.csv"
 out_path <- "output/Sightings_QA/2023_leg2_cetaceans_vs_photo_id.csv"
 
 source <- read_excel(source_path, col_types = "text") %>%

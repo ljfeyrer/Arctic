@@ -100,11 +100,30 @@ into one 2023 sightings file.
 - **Not in scope here:** the "remove erroneous pic from the harbour on
   Nov 4, 2023" exclusion and the List View (Lightroom catalogue) sightings
   join belong to the individual photo-ID catalogue thread
-  (`clean_arctic_lv_2025.R` / `Arctic_NBW_PhotoID_Report.Rmd`), which is a
+  (`scripts/photoid/00_clean_arctic_lv.R` / `Arctic_NBW_PhotoID_Report.Rmd`), which is a
   different data product (resighting/association analysis) and wasn't part
   of this pass. Worth checking whether that Nov 4 exclusion is still applied
   there before trusting 2023 photo-ID counts.
 - Archived as-is.
+
+## collate_photo_id_encounters.R
+
+Grouped one year's List View (LV) photo export into 30-minute encounters and
+summarised them against that year's Leg 2 sightings file.
+
+- **Could no longer run:** its inputs (`input/data/<year>/LV_<year>.csv`,
+  `input/sightings/derived/CetaceanSightings_leg2_<year>.csv`) are folders
+  from before the `input/orig_data/<year>/` reorganisation, and nothing read
+  its `output/PhotoID/photo_id_<year>/` output. The 2022 and 2024 outputs it
+  left are kept under `output/PhotoID/archive/legacy_2026-11-16/`.
+- **Replaced by:** `scripts/02_normalize_lv_encounters.R`, which does the
+  encounter grouping for every year with an export under
+  `input/orig_data/<year>/LV/` (the folder formerly named `photo_id/`), and
+  `scripts/09_compare_lv_encounters_to_cetaceans.R`, which compares those
+  encounters with the compiled Cetaceans sightings and lists the ones with
+  no sighting within 1 hour and 5 km.
+- **Not ported:** the per-year encounter map and the "late November" date
+  summary, which were specific to the 2022 Leg 2 review.
 
 ## Outstanding from this pass
 

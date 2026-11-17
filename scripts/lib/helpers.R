@@ -2,11 +2,11 @@
 # Date created: 2026-11-16
 # Date updated: 2026-11-16
 # Description: Shared helpers for the Arctic NBW normalization/compilation/QA pipeline.
-# Sourced by scripts/00_export_yearly_form_sheets.R through
-# scripts/07_crossref_compiled_against_reference_dbs.R (all pipeline stages
-# except 02_normalize_2023_field_note_sightings.R, which doesn't need these),
-# by scripts/QA/qa_*.R (all except qa_coordinate_note_review.R), and by
-# scripts/collate_photo_id_encounters.R.
+# Sourced by the numbered pipeline scripts in scripts/ (all except
+# 02_normalize_2023_field_note_sightings.R and
+# 08_compile_environment_biopsy.R, which don't need these), by
+# scripts/QA/qa_*.R (all except qa_coordinate_note_review.R), and by the
+# catalogue scripts in scripts/photoid/.
 # Keep this file dependency-light (readr/dplyr only) and free of
 # project-specific logic -- only genuinely shared, source-agnostic
 # text/number/geometry utilities belong here.

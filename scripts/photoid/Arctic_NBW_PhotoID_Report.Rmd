@@ -30,17 +30,14 @@ pacman::p_load(dplyr, here, tidyverse, lubridate, sf, viridis,
 ```
 
 ```{r load-data}
-required_photoid_files <- c("LV_ARC_encounters.rds", "LV_ARC_reliable2.rds",
-                            "quality_ids_arctic2.rds", "sightings_arctic2.rds")
+# Written by scripts/photoid/00_clean_arctic_lv.R (cleaning) and
+# scripts/photoid/01_analyze_arctic_lv_resights.R (resight/association analysis) --
+# run both before knitting this report. Set ARCTIC_PHOTOID_DATA_DIR to point
+# at a different folder if this analysis is ever moved elsewhere.
+required_photoid_files <- c("LV_ARC_encounters.rds", "LV_ARC_reliable.rds",
+                            "quality_ids_arctic.rds", "sightings_arctic.rds")
 photoid_data_dir <- Sys.getenv("ARCTIC_PHOTOID_DATA_DIR")
-if (!nzchar(photoid_data_dir)) {
-  photoid_data_dir <- here("OUTPUT")
-  sibling_output <- file.path(dirname(here()), "PhotoID", "OUTPUT")
-  if (!all(file.exists(file.path(photoid_data_dir, required_photoid_files))) &&
-      all(file.exists(file.path(sibling_output, required_photoid_files)))) {
-    photoid_data_dir <- sibling_output
-  }
-}
+if (!nzchar(photoid_data_dir)) photoid_data_dir <- here("OUTPUT", "PhotoID")
 photoid_data_dir <- path.expand(photoid_data_dir)
 missing_photoid_files <- required_photoid_files[
   !file.exists(file.path(photoid_data_dir, required_photoid_files))
@@ -48,12 +45,13 @@ missing_photoid_files <- required_photoid_files[
 if (length(missing_photoid_files)) {
   stop("Missing processed Photo-ID data in ", photoid_data_dir, ": ",
        paste(missing_photoid_files, collapse = ", "),
-       ". Set ARCTIC_PHOTOID_DATA_DIR to the folder containing these files.")
+       ". Run scripts/photoid/00_clean_arctic_lv.R and scripts/photoid/01_analyze_arctic_lv_resights.R first, ",
+       "or set ARCTIC_PHOTOID_DATA_DIR to the folder containing these files.")
 }
 LV_ARC          <- readRDS(file.path(photoid_data_dir, "LV_ARC_encounters.rds"))
-LV_ARC_reliable <- readRDS(file.path(photoid_data_dir, "LV_ARC_reliable2.rds"))
-quality_ids     <- readRDS(file.path(photoid_data_dir, "quality_ids_arctic2.rds"))
-sightings       <- readRDS(file.path(photoid_data_dir, "sightings_arctic2.rds"))
+LV_ARC_reliable <- readRDS(file.path(photoid_data_dir, "LV_ARC_reliable.rds"))
+quality_ids     <- readRDS(file.path(photoid_data_dir, "quality_ids_arctic.rds"))
+sightings       <- readRDS(file.path(photoid_data_dir, "sightings_arctic.rds"))
 
 resights_file <- file.path(photoid_data_dir, "resights_categorized.rds")
 if (file.exists(resights_file)) {
