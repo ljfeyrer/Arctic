@@ -145,8 +145,12 @@ dir.create(qa_root, recursive = TRUE, showWarnings = FALSE)
 for (year in years) {
   sighting_dir <- file.path("input", "normalized", as.character(year), "sightings")
   files <- list.files(sighting_dir, full.names = TRUE, pattern = "[.]csv$")
+  # Only _cor/_standardized are compiled source tables. Other derivatives in
+  # this folder (e.g. the coordinate-backfill step's _filled.csv) are
+  # review-only and must not be picked up here, or they double-count rows.
   files <- files[str_detect(basename(files), paste0(
-    "^(tarajoq_form_sightings_|field_note_sightings_|tarajoq_photo_id_sightings_|tarajoq_station_sightings_)", year
+    "^(tarajoq_form_sightings_|field_note_sightings_|tarajoq_photo_id_sightings_|tarajoq_station_sightings_)",
+    year, "(_cor|_standardized)[.]csv$"
   ))]
   # A _cor form file is a corrected derivative of the standardized form file.
   # Prefer it when present so corrections are applied exactly once.
