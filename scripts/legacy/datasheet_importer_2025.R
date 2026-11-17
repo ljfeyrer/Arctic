@@ -10,10 +10,24 @@ pacman::p_load(data.table, dplyr, readxl, purrr, readr, tidyr, stringr, sf, ggpl
 here::here()
 
 #PARAMETERS------------
-original_path <- paste0(here::here(),"/input/original_data/")
+original_path <- paste0(here::here(),"/input/orig_data/2026/forms_original/data")
 output_folder = paste0(here::here(),"/output/")
-year = 2025
+year = 2026
 Trip = "_ArcticLeg1"
+
+# External GPS is optional. "auto" uses the Time0 CSV when available,
+# otherwise GPX, and otherwise runs with no external track.
+# Allowed values: "auto", "csv", "gpx", or "none".
+GPS_SOURCE <- "auto"
+GPS_CSV <- here::here("input", "data", as.character(year),
+                      paste0("Time0_", year, ".csv"))
+GPS_GPX_FOLDER <- here::here("input", "data", as.character(year), "GPS")
+# Inclusive UTC dates for GPS backfill and cetacean sightings.
+SURVEY_WINDOW <- if (year == 2026) {
+  list(start = as.Date("2026-10-19"), end = as.Date("2026-11-03"))
+} else {
+  NULL
+}
 
 #HELPER FUNCTIONS------------
 
@@ -62,16 +76,19 @@ backfill_coordinates <- function(data, ship_data, time_col) {
 }
 
 # Function to write outputs
-write_outputs <- function(data, sheet_name, trip, year) {
+write_outputs <- function(data, sheet_name, trip, year, csv_dir = NULL) {
   output_dir <- here::here("output", sheet_name)
-  output_file <- file.path(output_dir, paste0(sheet_name, trip, year))
-  
+  output_name <- paste0(sheet_name, trip, year)
+  if (is.null(csv_dir)) csv_dir <- output_dir
+  csv_path <- file.path(csv_dir, paste0(output_name, ".csv"))
+  rds_path <- file.path(output_dir, paste0(output_name, ".rds"))
+
   dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
-  
-  write_csv(data, paste0(output_file, ".csv"))
-  write_rds(data, paste0(output_file, ".rds"))
-  
-  message(paste("✓ Saved", sheet_name, "data to", output_file))
+  dir.create(csv_dir, recursive = TRUE, showWarnings = FALSE)
+  write_csv(data, csv_path)
+  write_rds(data, rds_path)
+
+  message("Saved ", csv_path, " and ", rds_path)
 }
 
 # Function to process each xls data sheet file in the folder
@@ -105,11 +122,14 @@ parse_date <- function(x, ref_date = NULL) {
     # DD/MM/YY HH:MM format (contains "/")
     grepl("/", x) ~ {
       clean_x <- sub("^((?:\\S+\\s+\\S+)).*", "\\1", x)
-      dmy_hms(clean_x, tz = "UTC", truncated = 2)
+      dmy_hms(clean_x, tz = "UTC", truncated = 2, quiet = TRUE)
     },
+    # ISO timestamps from CSV or Excel datetime cells
+    grepl("^\\d{4}-\\d{2}-\\d{2}", x) ~
+      ymd_hms(x, tz = "UTC", truncated = 3, quiet = TRUE),
     # Excel serial date (pure numeric, possibly with decimal)
     grepl("^[0-9]+(\\.[0-9]+)?$", x) ~ {
-      as.POSIXct(as.numeric(x) * 86400, origin = "1899-12-30", tz = "UTC")
+      as.POSIXct(suppressWarnings(as.numeric(x)) * 86400, origin = "1899-12-30", tz = "UTC")
     },
     # Default
     TRUE ~ as.POSIXct(NA)
@@ -129,7 +149,7 @@ process_gpx <- function(gpx_file) {
         Longitude = st_coordinates(.)[,1],
         Latitude = st_coordinates(.)[,2],
         DateT = as.POSIXct(time, tz = "UTC"),
-        Year = year(DateT),
+        Year = lubridate::year(DateT),
         Date = format(DateT, "%d/%m/%Y"),
         Time = format(DateT, "%H:%M:%S"),
         UTC1 = format(DateT, "%Y-%m-%d %H:%M"),
@@ -145,64 +165,155 @@ process_gpx <- function(gpx_file) {
   })
 }
 
-# Read and combine all GPX files in a folder
-gpx_folder <- here::here(paste0(original_path, "GPS/"))
-gpx_files <- list.files(gpx_folder, pattern = "\\.gpx$", full.names = TRUE)
+# Function to parse DMS coordinates from the Time0 CSV format.
+parse_dms <- function(x) {
+  deg  <- as.numeric(str_extract(x, "^\\d+"))
+  mins <- as.numeric(str_extract(x, "(?<=-)[0-9.]+(?=-[NSEW])")) / 60
+  hemi <- str_extract(x, "[NSEW]$")
+  dd <- deg + mins
+  ifelse(hemi %in% c("S", "W"), -dd, dd)
+}
 
-# Process all files and combine
-ship <- gpx_files %>%
-  lapply(process_gpx) %>%
-  bind_rows() %>%
+# Function to read the 2024 Time0 CSV, including trailing fields that are
+# present in the data rows but not listed in the CSV header.
+process_time0_csv <- function(csv_file) {
+  raw_lines <- readLines(csv_file)
+  header_line <- which(str_detect(raw_lines, regex("latitude", ignore_case = TRUE)))[1]
+  if (is.na(header_line)) stop("No Latitude header found in: ", csv_file)
+
+  data_start <- which(str_detect(raw_lines, "^\\s*\\d+[-,]"))[1]
+  if (is.na(data_start)) stop("No Time0 data rows found in: ", csv_file)
+
+  header_names <- str_split(raw_lines[header_line], ",")[[1]] %>%
+    str_trim() %>%
+    make.names(unique = TRUE)
+  n_data_cols <- length(str_split(raw_lines[data_start], ",")[[1]])
+  if (n_data_cols > length(header_names)) {
+    header_names <- c(header_names,
+                      paste0("X", seq_len(n_data_cols - length(header_names))))
+  }
+
+  raw <- read.csv(csv_file, skip = data_start - 1, header = FALSE,
+                  col.names = header_names, fill = TRUE,
+                  stringsAsFactors = FALSE)
+
+  raw %>%
+    mutate(
+      Latitude = parse_dms(Latitude),
+      Longitude = parse_dms(Longitude),
+      across(c(Year, Month, Day, Hour, Minute, Second), as.numeric),
+      DateT = as.POSIXct(
+        sprintf("%04d-%02d-%02d %02d:%02d:%02d",
+                Year, Month, Day, Hour, Minute, Second),
+        format = "%Y-%m-%d %H:%M:%S", tz = "UTC"
+      ),
+      Date = format(DateT, "%d/%m/%Y"),
+      Time = format(DateT, "%H:%M:%S"),
+      UTC1 = format(DateT, "%Y-%m-%d %H:%M"),
+      timestamp = floor_date(DateT, unit = "minute")
+    ) %>%
+    filter(!is.na(DateT), !is.na(Latitude), !is.na(Longitude)) %>%
+    select(Latitude, Longitude, Year, Date, Time, DateT, UTC1, timestamp)
+}
+
+# Select an external GPS source. The datasheet coordinates remain the
+# primary source; this track is only used by backfill_coordinates().
+gpx_files <- if (dir.exists(GPS_GPX_FOLDER)) {
+  list.files(GPS_GPX_FOLDER, pattern = "\\.gpx$", full.names = TRUE,
+             ignore.case = TRUE)
+} else {
+  character(0)
+}
+
+gps_source <- GPS_SOURCE
+if (gps_source == "auto") {
+  gps_source <- if (file.exists(GPS_CSV)) "csv" else if (length(gpx_files) > 0) "gpx" else "none"
+}
+if (!gps_source %in% c("csv", "gpx", "none")) {
+  stop("GPS_SOURCE must be one of: auto, csv, gpx, none")
+}
+
+if (gps_source == "csv" && file.exists(GPS_CSV)) {
+  message("Using Time0 CSV for optional GPS backfill: ", GPS_CSV)
+  ship <- process_time0_csv(GPS_CSV)
+} else if (gps_source == "gpx" && length(gpx_files) > 0) {
+  message("Using GPX files for optional GPS backfill: ", length(gpx_files), " file(s)")
+  ship <- gpx_files %>% lapply(process_gpx) %>% bind_rows()
+} else {
+  if (gps_source != "none") {
+    warning("Requested GPS source is unavailable; continuing without external GPS track.")
+  } else {
+    message("External GPS disabled; using coordinates present in the datasheets.")
+  }
+  ship <- tibble(
+    Latitude = numeric(), Longitude = numeric(), Year = numeric(),
+    Date = character(), Time = character(), DateT = as.POSIXct(character()),
+    UTC1 = character(), timestamp = as.POSIXct(character())
+  )
+}
+
+if (!is.null(SURVEY_WINDOW)) {
+  ship <- ship %>%
+    filter(between(as.Date(DateT, tz = "UTC"), SURVEY_WINDOW$start, SURVEY_WINDOW$end))
+}
+
+ship <- ship %>%
   arrange(DateT) %>%
   distinct(UTC1, .keep_all = TRUE)
 
-# Create spatial objects
-ship_sf <- st_as_sf(ship, coords = c("Longitude", "Latitude"), crs = 4326) %>%
-  mutate(LINE_ID = rep(1:ceiling(n()/2), each = 2, length.out = n()))
+# Create spatial objects only when an external GPS track is available.
+if (nrow(ship) > 0) {
+  ship_sf <- st_as_sf(ship, coords = c("Longitude", "Latitude"), crs = 4326) %>%
+    mutate(LINE_ID = rep(1:ceiling(n()/2), each = 2, length.out = n()))
 
-# Create track linestring
-track <- ship_sf %>%
-  arrange(DateT) %>%
-  st_combine() %>%
-  st_cast("LINESTRING")
+  track <- ship_sf %>%
+    arrange(DateT) %>%
+    st_combine() %>%
+    st_cast("LINESTRING")
 
-# Preview
-print(paste("Total points:", nrow(ship)))
-print(paste("Date range:", min(ship$DateT), "to", max(ship$DateT)))
-plot(st_geometry(track))
+  print(paste("Total points:", nrow(ship)))
+  print(paste("GPS coverage (UTC):", min(ship$DateT), "to", max(ship$DateT)))
+  plot(st_geometry(track))
+} else {
+  ship_sf <- NULL
+  track <- NULL
+  message("No external GPS track loaded; skipping GPS map and shapefile export.")
+}
 
 # Save cleaned data
 dir.create(paste0(output_folder,"Track/"), recursive = TRUE, showWarnings = FALSE)
 write.csv(ship,"output/Track/ship_track_clean.csv", row.names = FALSE)
-st_write(ship_sf, "output/Track/ship_track.shp", delete_dsn = TRUE, quiet = T)
+if (!is.null(ship_sf)) {
+  st_write(ship_sf, "output/Track/ship_track.shp", delete_dsn = TRUE, quiet = T)
+}
 
 #CETACEANS------------
 sheet = "Cetaceans"
 message("📊 Processing Cetaceans data...")
 
-process_folder(original_path, sheet, paste0(here::here(),"/input/compiled/Cetaceans"))
+workbooks <- list.files(original_path, pattern = "[.]xlsx$", full.names = TRUE,
+                        recursive = TRUE, ignore.case = TRUE)
+workbooks <- workbooks[!startsWith(basename(workbooks), "~$")]
+cetacean_workbooks <- keep(workbooks, ~ sheet %in% excel_sheets(.x))
+if (length(cetacean_workbooks) == 0) {
+  stop("No workbooks with a Cetaceans sheet found in ", original_path)
+}
 
-# Apply manual corrections BEFORE filtering
+all_data <- map_dfr(cetacean_workbooks, ~ read_xlsx(.x, sheet = sheet, col_types = "text")) %>%
+  filter(if_any(everything(), ~ !is.na(.x))) %>%
+  mutate(Enc_start = parse_date(DateT)) %>%
+  filter(!is.na(Enc_start))
 
+if (!is.null(SURVEY_WINDOW)) {
+  all_data <- all_data %>%
+    filter(between(as.Date(Enc_start, tz = "UTC"), SURVEY_WINDOW$start, SURVEY_WINDOW$end))
+}
 
+if (year == 2025) {
+  all_data <- all_data %>%
+    mutate(StartPos = if_else(StartPos == "d  d", "66d50.77 59d11.03", StartPos))
+}
 
-all_data <- list.files(
-  path = paste0(here::here(),"/input/compiled/Cetaceans"),
-  pattern = "*.csv",
-  full.names = TRUE
-) %>%
-  map_dfr(~ read_csv(.x, col_types = cols(.default = col_character()))) 
-
-# Apply manual corrections BEFORE parsing coordinates
-all_data <- all_data %>%
-  mutate(
-    # Manual correction: First whale record missing coordinates
-    StartPos = case_when(
-      StartPos == "d  d" ~ "66d50.77 59d11.03",  # Replace first NA with coords
-      TRUE ~ StartPos
-    )
-  )
-# NOW parse coordinates
 all_data <- all_data %>%
   bind_cols(parse_coordinates(.$StartPos)) %>%
   mutate(
@@ -212,37 +323,39 @@ all_data <- all_data %>%
       TRUE ~ Species
     )
   ) %>%
-  distinct(DateT, .keep_all = TRUE) %>%
+  distinct(Enc_start, .keep_all = TRUE) %>%
+  arrange(Enc_start) %>%
   validate_coordinates()
 
 message(paste("Final records after processing:", nrow(all_data)))
 
 
 Sharedata = all_data %>%
-  dplyr::select(DateT, Species, Latitude, Longitude, Min, Best, Max, Dist, Bearing, 
-                Port_Star, Behaviour, TimeEnd = `END encounter`, Pic_no, Comments)
+  mutate(DateT = Enc_start) %>%
+  dplyr::select(DateT, Species, Latitude, Longitude, Min, Best, Max, Dist, Bearing,
+                Port_Star, Behaviour, TimeEnd = `END encounter`, Pic_no, Comments, Enc_start)
 
 
 
 Whales2025 <- Sharedata %>%
   mutate(
-    Enc_start = parse_date(DateT),
     Enc_end = parse_date(TimeEnd),
     Enc_time = as.numeric(difftime(Enc_end, Enc_start, units = "mins"))
   ) %>%
   backfill_coordinates(ship, Enc_start)
 
-write_outputs(Whales2025, sheet, Trip, year)
+write_outputs(Whales2025, sheet, Trip, year,
+              csv_dir = here::here("input", "sightings", "derived"))
 message(paste("✓ Processed", nrow(Whales2025), "cetacean records"))
 
 #ENVIRONMENT-----
 sheet = "Environment"
 message("📊 Processing Environment data...")
 
-process_folder(original_path, sheet, paste0(here::here(),"/input/compiled/Environment"))
+process_folder(original_path, sheet, paste0(here::here(),"/input/orig_data/2026/form_exports/Environment"))
 
 all_data <- list.files(
-  path = paste0(here::here(),"/input/compiled/Environment"),
+  path = paste0(here::here(),"/input/orig_data/2026/form_exports/Environment"),
   pattern = "*.csv",
   full.names = TRUE
 ) %>%
@@ -287,16 +400,35 @@ message(paste("✓ Processed", nrow(EnvData), "environment records"))
 sheet = "Biopsy"
 message("📊 Processing Biopsy data...")
 
-process_folder(original_path, sheet, paste0(here::here(),"/input/compiled/Biopsy"))
+process_folder(original_path, sheet, paste0(here::here(),"/input/orig_data/2026/form_exports/Biopsy"))
 
 all_data <- list.files(
-  path = paste0(here::here(),"/input/compiled/Biopsy"),
+  path = paste0(here::here(),"/input/orig_data/2026/form_exports/Biopsy"),
   pattern = "*.csv",
   full.names = TRUE
 ) %>%
-  map_dfr(~ read_csv(.x, col_types = cols(.default = col_character())))
+  map_dfr(~ read_csv(.x, col_types = cols(.default = col_character()))) 
 
 message(paste("Total biopsy records loaded:", nrow(all_data)))
+
+# Older biopsy exports use different names. Normalize those names so the
+# duplicate check and final output work for both older and newer sheets.
+if (!"Subsample_B_no" %in% names(all_data) && "Sample_no" %in% names(all_data)) {
+  all_data <- all_data %>% rename(Subsample_B_no = Sample_no)
+}
+if (!"Biopsy_outcome" %in% names(all_data) && "Sample_success" %in% names(all_data)) {
+  all_data <- all_data %>%
+    mutate(Biopsy_outcome = if_else(
+      str_detect(str_to_lower(coalesce(Sample_success, "")), "hit|tissue"),
+      "Hit", "Miss"
+    ))
+}
+if (!"Subsample_A_no" %in% names(all_data)) {
+  all_data$Subsample_A_no <- NA_character_
+}
+if (!"Comments" %in% names(all_data)) {
+  all_data$Comments <- NA_character_
+}
 
 # Parse coordinates if they exist
 all_data <- all_data %>%

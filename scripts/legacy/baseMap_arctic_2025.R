@@ -44,7 +44,7 @@ shapefiles ="~/CODE/shapefiles/"
     ship_2025 = read_sf(here::here("output/Track/ship_track.shp"))%>%st_transform(4326)
 
 #import stations from leg 2 
-Stns_L2_2025 = read.csv(here::here("input/compiled/Track/Stns_2025_leg2.csv"))%>%
+Stns_L2_2025 = read.csv(here::here("input/orig_data/2025/station_ids/Stns_2025_leg2.csv"))%>%
   # fix lat long
   mutate(
     Start.Lat.Degree  = as.numeric(Start.Lat.Degree),
