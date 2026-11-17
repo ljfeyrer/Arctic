@@ -3,22 +3,25 @@
 # Author: Laura Joan Feyrer
 # Date created: 2025-11-14
 # Date updated: 2026-11-16
-# Description: Cross-reference the compiled, within-source-deduplicated
-# Tarajoq NBW sightings against external reference databases -- the DFO
-# national sightings database, the Greenland NBW compilation, and the
-# Paamiut all-NBW-observations table -- to find sightings already present in
-# those databases. Flags likely duplicates with a tiered time/distance match
-# and produces a combined, cross-database-deduplicated sightings table.
+# Description: Cross-reference the merged, within-vessel-deduplicated annual
+# NBW sightings (Tarajoq + Kiviuq, from 06_merge_annual_sightings.R) against
+# external reference databases -- the DFO national sightings database, the
+# Greenland NBW compilation, and the Paamiut all-NBW-observations table -- to
+# find sightings already present in those databases. Flags likely duplicates
+# with a tiered time/distance match and produces a combined,
+# cross-database-deduplicated sightings table.
 #
 # This step does not depend on which field-data years have been compiled.
 # Run with --year=all (default) to pick up whatever
-# output/Sightings/tarajoq_nbw_sightings_<year>_deduplicated.csv files exist
+# output/Sightings/nbw_annual_sightings_<year>_deduplicated.csv files exist
 # at the time, or --year=YYYY for one year. Re-run any time a new year is
-# compiled or a reference database is updated; order relative to
-# 03_compile_normalized_tarajoq_sightings.R does not matter beyond that.
+# merged or a reference database is updated. Must run after
+# 06_merge_annual_sightings.R (which must itself run after
+# 03_compile_normalized_tarajoq_sightings.R and
+# 02_normalize_kiviuq_sightings.R).
 #
 # Inputs (never modified):
-#   output/Sightings/tarajoq_nbw_sightings_<year>_deduplicated.csv
+#   output/Sightings/nbw_annual_sightings_<year>_deduplicated.csv
 #   input/reference/database_collated/DFO_NBW_Oct2026.xlsx
 #   input/reference/database_collated/Greenland_NBW_Oct2026.xlsx
 #   input/reference/database_collated/allnbwobs_paamiut_260522.csv
@@ -68,21 +71,21 @@ nbw_species_regex <- "northern bottlenose|northen bottlenose|bottlenose whale|\\
 # ---- DISCOVER COMPILED FIELD-DATA YEARS ------------------------------------
 
 compiled_files <- list.files(compiled_root,
-  pattern = "^tarajoq_nbw_sightings_[0-9]{4}_deduplicated\\.csv$"
+  pattern = "^nbw_annual_sightings_[0-9]{4}_deduplicated\\.csv$"
 )
 available_years <- as.integer(str_extract(compiled_files, "[0-9]{4}"))
 years <- if (year_arg == "all") sort(available_years) else as.integer(year_arg)
 years <- years[years %in% available_years]
 if (!length(years)) {
   stop(
-    "No compiled years found under ", compiled_root,
-    ". Run 03_compile_normalized_tarajoq_sightings.R first."
+    "No merged annual years found under ", compiled_root,
+    ". Run 06_merge_annual_sightings.R first."
   )
 }
-message("Cross-referencing compiled year(s): ", paste(years, collapse = ", "))
+message("Cross-referencing merged annual year(s): ", paste(years, collapse = ", "))
 
 compiled <- map_dfr(years, function(yr) {
-  read_csv(file.path(compiled_root, paste0("tarajoq_nbw_sightings_", yr, "_deduplicated.csv")),
+  read_csv(file.path(compiled_root, paste0("nbw_annual_sightings_", yr, "_deduplicated.csv")),
     col_types = cols(.default = col_character()), show_col_types = FALSE
   )
 }) %>%
