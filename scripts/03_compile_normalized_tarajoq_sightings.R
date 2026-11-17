@@ -1,6 +1,6 @@
 # Author: Laura Joan Feyrer
 # Date created: 2026-11-16
-# Date updated: 2026-11-16
+# Date updated: 2026-11-17
 # Description: TODO - describe what this script does
 #
 # !/usr/bin/env Rscript
@@ -8,7 +8,7 @@
 # Compile and deduplicate normalized Tarajoq NBW sightings, writing to
 # output/Cetaceans/ (one vessel/program's sightings, alongside its
 # Environment and Biopsy form data -- see 08_compile_environment_biopsy.R).
-# Kiviuq and original workbooks are excluded. Normalized Tarajoq station
+# NAW and original workbooks are excluded. Normalized Tarajoq station
 # sightings are included when present; files removed from normalized are not
 # discovered or compiled.
 # Original and normalized source files are never modified.
@@ -159,19 +159,20 @@ dir.create(qa_root, recursive = TRUE, showWarnings = FALSE)
 for (year in years) {
   sighting_dir <- file.path("input", "normalized", as.character(year), "sightings")
   files <- list.files(sighting_dir, full.names = TRUE, pattern = "[.]csv$")
-  # Only _cor/_standardized are compiled source tables. Other derivatives in
-  # this folder (e.g. the coordinate-backfill step's _filled.csv) are
-  # review-only and must not be picked up here, or they double-count rows.
   files <- files[str_detect(basename(files), paste0(
     "^(tarajoq_form_sightings_|field_note_sightings_|tarajoq_photo_id_sightings_|tarajoq_station_sightings_)",
-    year, "(_cor|_standardized)[.]csv$"
+    year, "(_filled|_cor|_standardized)[.]csv$"
   ))]
-  # A _cor form file is a corrected derivative of the standardized form file.
-  # Prefer it when present so corrections are applied exactly once.
-  corrected_forms <- files[str_detect(basename(files), "^tarajoq_form_sightings_.*_cor[.]csv$")]
-  if (length(corrected_forms)) {
-    standardized_forms <- sub("_cor[.]csv$", "_standardized.csv", corrected_forms)
-    files <- files[!files %in% standardized_forms]
+  # The form table exists in up to three versions, each derived from the one
+  # before: _standardized (01), _cor (04: note-based coordinate corrections),
+  # and _filled (05: remaining gaps filled from the ship track). Use exactly
+  # one -- the most complete present -- or every form sighting is counted
+  # more than once.
+  form_versions <- c("_filled", "_cor", "_standardized")
+  form_files <- files[str_detect(basename(files), "^tarajoq_form_sightings_")]
+  if (length(form_files)) {
+    form_rank <- match(str_extract(basename(form_files), "_(filled|cor|standardized)(?=[.]csv$)"), form_versions)
+    files <- c(setdiff(files, form_files), form_files[which.min(form_rank)])
   }
   if (!length(files)) {
     message(year, ": no normalized Tarajoq form/field-note/photo-ID files")

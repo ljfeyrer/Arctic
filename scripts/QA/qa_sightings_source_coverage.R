@@ -1,6 +1,6 @@
 # Author: Laura Joan Feyrer
 # Date created: 2026-11-16
-# Date updated: 2026-11-16
+# Date updated: 2026-11-17
 # Description: TODO - describe what this script does
 #
 # !/usr/bin/env Rscript
@@ -68,20 +68,20 @@ summarize <- function(path, year, source_group, source_role, data, datetime, lat
 rows <- list()
 add_row <- function(x) rows[[length(rows) + 1L]] <<- x
 
-# Original Kiviuq workbooks.
-kiviuq_files <- list.files("input/orig_data",
+# Original NAW workbooks.
+naw_files <- list.files("input/orig_data",
   pattern = "^Arctic_[0-9]{4}[.]xlsx$",
   recursive = TRUE, full.names = TRUE, ignore.case = TRUE
 )
-kiviuq_files <- kiviuq_files[str_detect(kiviuq_files, "/kiviuq/cetacean_sightings/")]
-for (path in kiviuq_files) {
+naw_files <- naw_files[str_detect(naw_files, "/naw/cetacean_sightings/")]
+for (path in naw_files) {
   year <- as.integer(str_extract(basename(path), "[0-9]{4}(?=[.][^.]+$)"))
   d <- read_excel(path, sheet = 1, col_types = "text", .name_repair = "unique")
   date <- get_col(d, c("Date (UTC)", "Date", "date", "Date_LOCALTIME"))
   time <- get_col(d, c("Time (UTC)", "time"))
   datetime <- if (all(is.na(time))) parse_dt(date) else combine_date_time(date, time)
   add_row(summarize(
-    path, year, "Kiviuq", "original_sightings", d, datetime,
+    path, year, "NAW", "original_sightings", d, datetime,
     get_col(d, c("latitude", "Latitude", "Lat", "Lat (°N)")),
     get_col(d, c("longitude", "Longitude", "Long", "Long (°E)"))
   ))
@@ -128,7 +128,7 @@ for (path in photo_files) {
   ))
 }
 
-# Normalized tables from forms, Kiviuq, and Leg 2.
+# Normalized tables from forms, NAW, and Leg 2.
 norm_files <- list.files("input/normalized", pattern = "[.]csv$", recursive = TRUE, full.names = TRUE)
 norm_files <- norm_files[str_detect(norm_files, "/sightings/")]
 norm_files <- norm_files[!str_detect(norm_files, "/archive/")]
@@ -136,13 +136,13 @@ for (path in norm_files) {
   d <- read_csv(path, col_types = cols(.default = col_character()), show_col_types = FALSE)
   year <- as.integer(str_extract(path, "[0-9]{4}(?=/)"))
   role <- case_when(
-    str_detect(path, "kiviuq_sightings_") ~ "normalized_kiviuq",
+    str_detect(path, "naw_sightings_") ~ "normalized_naw",
     str_detect(path, "tarajoq_station_sightings_") ~ "normalized_station_sightings",
     str_detect(path, "tarajoq_photo_id_sightings_") ~ "normalized_photo_id_sightings",
     TRUE ~ "normalized_form_sightings"
   )
   add_row(summarize(
-    path, year, if_else(role == "normalized_kiviuq", "Kiviuq", "Tarajoq"), role,
+    path, year, if_else(role == "normalized_naw", "NAW", "Tarajoq"), role,
     d, parse_dt(get_col(d, c("standard_datetime", "DateT_UTC"))),
     get_col(d, c("latitude", "Latitude")), get_col(d, c("longitude", "Longitude")),
     get_col(d, "standard_date")

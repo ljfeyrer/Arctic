@@ -2,26 +2,26 @@
 
 # Author: Laura Joan Feyrer
 # Date created: 2026-11-16
-# Date updated: 2026-11-16
+# Date updated: 2026-11-17
 # Description: Merge the within-source-deduplicated Tarajoq NBW sightings
-# with the normalized Kiviuq sightings into one annual, multi-vessel NBW
+# with the normalized NAW sightings into one annual, multi-vessel NBW
 # sightings table per year, with a conservative cross-vessel duplicate audit.
 # Also produces one bathymetry-background map, faceted by year with point
 # shape/colour by vessel, for QA review and reuse as a presentation figure.
 #
 # This step must run after 03_compile_normalized_tarajoq_sightings.R (for the
-# Tarajoq side, under output/Cetaceans/) and 02_normalize_kiviuq_sightings.R
-# (for the Kiviuq side), and before 07_crossref_compiled_against_reference_dbs.R,
+# Tarajoq side, under output/Cetaceans/) and 02_normalize_naw_sightings.R
+# (for the NAW side), and before 07_crossref_compiled_against_reference_dbs.R,
 # which now reads this script's output instead of the Tarajoq-only one.
 # output/Sightings/ is reserved for this merge-across-sources result and the
 # reference-database cross-reference -- the single-vessel/program compiled
 # sightings live under output/Cetaceans/ instead. A year with only one
-# vessel's data (e.g. 2018 Kiviuq-only, 2025 Tarajoq-only) is handled -- the
+# vessel's data (e.g. 2018 NAW-only, 2025 Tarajoq-only) is handled -- the
 # other side just contributes zero rows.
 #
 # Inputs (never modified):
 #   output/Cetaceans/tarajoq_nbw_sightings_<year>_{compiled_deduplicated,deduplicated}.csv
-#   input/normalized/<year>/sightings/kiviuq_sightings_<year>_standardized.csv
+#   input/normalized/<year>/sightings/naw_sightings_<year>_standardized.csv
 #   input/basemaps/bathymetry_marmap_res15.csv (0.25-degree global bathymetry grid)
 #   input/basemaps/eez_greenland.json (Greenland EEZ only; no Canada EEZ layer
 #     is available in-repo yet)
@@ -35,6 +35,7 @@
 #   output/Sightings_QA/nbw_annual_sightings_<year>_duplicate_candidates.csv
 #   output/Sightings_QA/nbw_annual_sightings_<year>_deduplication_audit.csv
 #   output/FIGS/nbw_annual_sightings_by_year_bathymetry.png
+#   output/FIGS/nbw_sightings_all_years_bathymetry.png (all years on one panel)
 
 suppressPackageStartupMessages({
   library(dplyr)
@@ -71,13 +72,16 @@ tarajoq_years <- list.files(
 ) %>%
   str_extract("[0-9]{4}") %>%
   as.integer()
-kiviuq_years <- list.files(file.path(normalized_root), pattern = "^[0-9]{4}$") %>%
-  keep(~ file.exists(file.path(normalized_root, .x, "sightings", paste0("kiviuq_sightings_", .x, "_standardized.csv")))) %>%
+naw_file_exists <- function(year, prefix) {
+  file.exists(file.path(normalized_root, year, "sightings", paste0(prefix, "_", year, "_standardized.csv")))
+}
+naw_years <- list.files(file.path(normalized_root), pattern = "^[0-9]{4}$") %>%
+  keep(~ naw_file_exists(.x, "naw_sightings") || naw_file_exists(.x, "naw_tagbiopsy")) %>%
   as.integer()
-available_years <- sort(union(tarajoq_years, kiviuq_years))
+available_years <- sort(union(tarajoq_years, naw_years))
 years <- if (identical(year_arg, "all")) available_years else as.integer(year_arg)
 years <- years[years %in% available_years]
-if (!length(years)) stop("No Tarajoq-compiled or Kiviuq-normalized years found.")
+if (!length(years)) stop("No Tarajoq-compiled or NAW-normalized years found.")
 
 # ---- READERS ----------------------------------------------------------------
 # Both return the same columns so they can be row-bound directly:
@@ -104,19 +108,31 @@ read_tarajoq_side <- function(year) {
     )
 }
 
-read_kiviuq_side <- function(year) {
-  path <- file.path(
+# Binds together whichever of the two normalized NAW tables exist for this
+# year: naw_sightings_ (logged Arctic_<year>.xlsx sightings + field notes,
+# from 02_normalize_naw_sightings.R) and naw_tagbiopsy_ (tag-deployment and
+# biopsy-sample positions compiled after the fact, from
+# 02b_normalize_naw_tagbiopsy_sightings.R). Both are read as one source here
+# (vessel = "NAW") and left for the cross-vessel duplicate audit below to
+# flag any tag/biopsy record that overlaps a logged sighting -- same
+# conservative, never-silently-drop approach as the Tarajoq/NAW overlap.
+read_naw_side <- function(year) {
+  paths <- file.path(
     normalized_root, as.character(year), "sightings",
-    paste0("kiviuq_sightings_", year, "_standardized.csv")
+    paste0(c("naw_sightings", "naw_tagbiopsy"), "_", year, "_standardized.csv")
   )
-  if (!file.exists(path)) {
+  paths <- paths[file.exists(paths)]
+  if (!length(paths)) {
     return(tibble())
   }
-  read_csv(path, col_types = cols(.default = col_character()), show_col_types = FALSE) %>%
+  map_dfr(paths, function(path) {
+    read_csv(path, col_types = cols(.default = col_character()), show_col_types = FALSE) %>%
+      mutate(.source_path = normalizePath(path, winslash = "/", mustWork = FALSE))
+  }) %>%
     filter(str_detect(str_to_lower(coalesce(species, "")), nbw_species_regex)) %>%
     transmute(
       record_id,
-      source_year = as.integer(source_year), source_type = "kiviuq", vessel = "Kiviuq",
+      source_year = as.integer(source_year), source_type = "naw", vessel = "NAW",
       standard_datetime = as_datetime(standard_datetime, tz = "UTC"),
       standard_date = as.Date(standard_date), standard_time,
       latitude = as_num(latitude), longitude = as_num(longitude), count = as_num(count),
@@ -124,7 +140,7 @@ read_kiviuq_side <- function(year) {
       coordinate_source, coordinate_use = NA_character_,
       source_file, source_sheet, source_row,
       source_comments = comments,
-      source_path = normalizePath(path, winslash = "/", mustWork = FALSE)
+      source_path = .source_path
     )
 }
 
@@ -173,14 +189,14 @@ find_candidates <- function(data) {
   })
 }
 
-priority <- c(Tarajoq = 1L, Kiviuq = 2L)
+priority <- c(Tarajoq = 1L, NAW = 2L)
 all_years_dedup <- list()
 
 for (year in years) {
-  combined <- bind_rows(read_tarajoq_side(year), read_kiviuq_side(year)) %>%
+  combined <- bind_rows(read_tarajoq_side(year), read_naw_side(year)) %>%
     arrange(standard_datetime, vessel, source_file, source_row)
   if (!nrow(combined)) {
-    message(year, ": no Tarajoq or Kiviuq NBW records")
+    message(year, ": no Tarajoq or NAW NBW records")
     next
   }
 
@@ -231,7 +247,7 @@ for (year in years) {
 
   message(
     year, ": ", sum(combined$vessel == "Tarajoq"), " Tarajoq + ",
-    sum(combined$vessel == "Kiviuq"), " Kiviuq NBW records -> ",
+    sum(combined$vessel == "NAW"), " NAW NBW records -> ",
     sum(combined$retained), " retained after cross-vessel deduplication"
   )
   all_years_dedup[[as.character(year)]] <- combined %>% filter(retained)
@@ -242,7 +258,25 @@ for (year in years) {
 map_data <- bind_rows(all_years_dedup) %>%
   filter(!is.na(latitude), !is.na(longitude))
 
+# Date range per year from every retained field sighting, including those
+# with no position, so a panel's label shows the full survey period even
+# when some of its sightings cannot be drawn.
+format_day <- function(x) paste(as.integer(format(x, "%d")), format(x, "%b"))
+date_labels <- bind_rows(all_years_dedup) %>%
+  filter(!is.na(standard_date)) %>%
+  group_by(source_year) %>%
+  summarise(
+    label = if (min(standard_date) == max(standard_date)) {
+      format_day(min(standard_date))
+    } else {
+      paste(format_day(min(standard_date)), "\u2013", format_day(max(standard_date)))
+    },
+    .groups = "drop"
+  ) %>%
+  filter(source_year %in% map_data$source_year)
+
 map_path <- file.path(figs_root, "nbw_annual_sightings_by_year_bathymetry.png")
+single_map_path <- file.path(figs_root, "nbw_sightings_all_years_bathymetry.png")
 # Higher-resolution bathymetry (15 arc-second GEBCO 2020), matching the one
 # used in scripts/legacy/baseMap_arctic_2025.R for output/FIGS/NBW_Sightings2025.png.
 # This path is a personal, machine-specific location outside the repo, so a
@@ -255,21 +289,32 @@ read_bathy <- function(xlim, ylim) {
     message("Using high-resolution GEBCO bathymetry: ", bathy_hires_path)
     r <- terra::rast(bathy_hires_path)
     r <- terra::crop(r, terra::ext(xlim[1], xlim[2], ylim[1], ylim[2]))
-    r <- terra::aggregate(r, fact = 3, fun = "mean")
+    # Same aggregation factor as scripts/lib/arctic_basemap.R's bathymetry
+    # (used by the single-panel map below), so both maps resolve fjords the
+    # same way.
+    r <- terra::aggregate(r, fact = 2, fun = "mean")
     out <- as.data.frame(r, xy = TRUE)
     names(out) <- c("longitude", "latitude", "depth_m")
-    return(filter(out, depth_m < -10))
+    # Near-shore/land cells are set to NA rather than dropped, as in
+    # arctic_basemap.R, so geom_raster's na.value (grey50, ggplot2's
+    # default) fills them -- the same grey as the land polygon below. Simply
+    # dropping these rows (the previous approach) left a visible white gap
+    # between the raster and the coastline in detailed fjords, since the
+    # land polygon's true edge never lines up exactly with where a coarse
+    # raster cell happens to be masked out.
+    mutate(out, depth_m = if_else(depth_m >= -10, NA_real_, depth_m))
+  } else {
+    message("GEBCO raster not found at ", bathy_hires_path, "; using the in-repo 0.25-degree grid instead.")
+    read_csv(bathy_path,
+      skip = 1, col_names = c("longitude", "latitude", "depth_m"),
+      col_types = "ddd", show_col_types = FALSE
+    ) %>%
+      filter(
+        longitude >= xlim[1], longitude <= xlim[2],
+        latitude >= ylim[1], latitude <= ylim[2]
+      ) %>%
+      mutate(depth_m = if_else(depth_m >= -10, NA_real_, depth_m))
   }
-  message("GEBCO raster not found at ", bathy_hires_path, "; using the in-repo 0.25-degree grid instead.")
-  read_csv(bathy_path,
-    skip = 1, col_names = c("longitude", "latitude", "depth_m"),
-    col_types = "ddd", show_col_types = FALSE
-  ) %>%
-    filter(
-      longitude >= xlim[1], longitude <= xlim[2],
-      latitude >= ylim[1], latitude <= ylim[2],
-      depth_m < -10
-    )
 }
 
 if (!nrow(map_data)) {
@@ -280,7 +325,24 @@ if (!nrow(map_data)) {
   ylim <- range(map_data$latitude, na.rm = TRUE) + c(-pad, pad)
 
   bathy <- read_bathy(xlim, ylim)
-  land <- ne_countries(scale = 50, returnclass = "sf")
+  # Same local coastline file as scripts/lib/arctic_basemap.R (used by the
+  # single-panel map below and the photo-ID map), so the land edge lines up
+  # with the bathymetry raster -- the rnaturalearth::ne_countries() coastline
+  # previously used here is a different vintage/simplification and left a
+  # thin white gap between land and bathymetry along the coast.
+  land_path <- file.path(
+    path.expand(Sys.getenv("ARCTIC_BASEMAP_DIR", "~/CODE/shapefiles")),
+    "coastline/worldcountries/ne_50m_admin_0_countries.shp"
+  )
+  land <- if (file.exists(land_path)) {
+    st_read(land_path, quiet = TRUE) %>% filter(CONTINENT == "North America")
+  } else {
+    message(
+      "Local coastline shapefile not found at ", land_path,
+      "; using rnaturalearth instead (coastline may not line up with the single-panel map)."
+    )
+    ne_countries(scale = 50, returnclass = "sf")
+  }
   eez <- if (file.exists(eez_path)) st_read(eez_path, quiet = TRUE) %>% st_transform(st_crs(land)) else NULL
   oecm <- read_oecm_in_extent(xlim, ylim)
 
@@ -294,14 +356,19 @@ if (!nrow(map_data)) {
   # degrees). Without this, coord_sf's fixed aspect pads equal whitespace on
   # either side of every panel to fit a wide grid cell.
   n_facets <- n_distinct(map_data$source_year)
-  facet_ncol <- 3
+  # Each panel is a tall, narrow Baffin Bay map (panel_aspect well under 1),
+  # so a fixed ncol=3 grid stacks into a tall portrait figure as more years
+  # are added. Always laying out 2 rows instead keeps the overall figure
+  # landscape and gives each panel more height to work with.
+  facet_ncol <- ceiling(n_facets / 2)
   facet_nrow <- ceiling(n_facets / facet_ncol)
   panel_aspect <- (diff(xlim) * cos(mean(ylim) * pi / 180)) / diff(ylim)
   fig_height <- 10
   fig_width <- fig_height * panel_aspect * facet_ncol / facet_nrow
 
   oecm_colour <- "#FFD400"
-  facet_map <- ggplot() +
+  # Layers shared by the faceted (one panel per year) and single-panel maps.
+  sightings_map <- ggplot() +
     geom_raster(data = bathy, aes(x = longitude, y = latitude, fill = depth_m)) +
     scale_fill_gradient2(low = "#011f4b", mid = "#a2c0d0", high = "#b3cde0", midpoint = -1000, name = "Depth (m)") +
     {
@@ -324,10 +391,16 @@ if (!nrow(map_data)) {
     geom_point(
       data = map_data,
       aes(x = longitude, y = latitude, shape = vessel, colour = vessel),
-      size = 1.6, alpha = 0.75
+      size = 1.6, alpha = 0.5
     ) +
-    scale_shape_manual(values = c(Tarajoq = 16, Kiviuq = 17)) +
-    scale_colour_manual(values = c(Tarajoq = "#D55E00", Kiviuq = "#0072B2")) +
+    geom_text(
+      data = date_labels,
+      aes(x = xlim[2] - 0.3, y = ylim[2] - 0.2, label = label),
+      hjust = 1, vjust = 1, colour = "white", size = 3, fontface = "bold",
+      inherit.aes = FALSE
+    ) +
+    scale_shape_manual(values = c(Tarajoq = 16, NAW = 17)) +
+    scale_colour_manual(values = c(Tarajoq = "#D55E00", NAW = "#6B2E1E")) +
     scale_linetype_manual(
       values = c("Marine refuges" = "solid"), name = NULL,
       guide = guide_legend(override.aes = list(
@@ -337,14 +410,58 @@ if (!nrow(map_data)) {
     scale_x_continuous(breaks = x_breaks) +
     scale_y_continuous(breaks = y_breaks) +
     coord_sf(xlim = xlim, ylim = ylim, expand = FALSE) +
-    facet_wrap(~source_year, ncol = facet_ncol) +
     labs(
-      title = "NBW sightings by year", subtitle = "Fishery survey field observations",
+      subtitle = "Fishery survey field observations",
       x = NULL, y = NULL, shape = "Vessel", colour = "Vessel"
     ) +
     theme_minimal(base_size = 10) +
     theme(legend.position = "bottom", panel.grid = element_blank())
 
+  facet_map <- sightings_map +
+    facet_wrap(~source_year, ncol = facet_ncol) +
+    labs(title = "NBW sightings by year") +
+    theme(legend.position = "none")
   ggsave(map_path, facet_map, width = fig_width, height = fig_height + 1.3, units = "in", dpi = 220, limitsize = FALSE)
   message("Annual bathymetry facet map written to: ", map_path)
+
+  # Every year on one panel, drawn on the shared fixed-extent basemap
+  # (scripts/lib/arctic_basemap.R) so it lines up with the photo-ID sightings
+  # map (scripts/photoid/02_map_arctic_lv_sightings.R) side by side. Sourced
+  # locally because it defines bathy/eez/land/oecm, which this script also
+  # uses. Skipped if its basemap files (outside the repo) are unavailable.
+  basemap <- tryCatch(
+    local({
+      source("scripts/lib/arctic_basemap.R", local = TRUE)
+      list(map = arctic_basemap, extent = arctic_extent)
+    }),
+    error = function(e) {
+      message("Single-panel sightings map skipped: ", conditionMessage(e))
+      NULL
+    }
+  )
+  if (!is.null(basemap)) {
+    # Belt and braces: the merge above already keeps only NBW records.
+    nbw_map_data <- map_data %>%
+      filter(str_detect(str_to_lower(coalesce(species, "")), nbw_species_regex))
+    single_map <- basemap$map +
+      geom_point(
+        data = nbw_map_data,
+        aes(x = longitude, y = latitude, shape = vessel, colour = vessel),
+        size = 1.8, alpha = 0.5
+      ) +
+      scale_shape_manual(values = c(Tarajoq = 16, NAW = 17), name = "Field sightings") +
+      scale_colour_manual(
+        values = c(Tarajoq = "#D55E00", NAW = "#6B2E1E"), name = "Field sightings",
+        guide = guide_legend(order = 1, override.aes = list(alpha = 1))
+      ) +
+      guides(shape = guide_legend(order = 1)) +
+      labs(title = paste0(
+        "NBW field sightings, ", min(nbw_map_data$source_year), "-", max(nbw_map_data$source_year)
+      )) +
+      theme(plot.title = element_text(face = "bold", size = 12)) +
+      basemap$extent
+    # Same size as the photo-ID sightings map.
+    ggsave(single_map_path, single_map, width = 5, height = 7, units = "in", dpi = 300)
+    message("Single-panel sightings map written to: ", single_map_path)
+  }
 }

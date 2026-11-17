@@ -26,10 +26,15 @@
 #   input/normalized/<year>/<table>/<table>_<year>_filled.csv
 #   output/Sightings_QA/coordinate_backfill_audit_<year>.csv
 #
-# This step is review-only: it is not wired into
-# 03_compile_normalized_tarajoq_sightings.R. Check the audit (gap sizes,
-# how many rows were filled vs. left missing) before deciding whether the
-# compiler should prefer the _filled files.
+# 03_compile_normalized_tarajoq_sightings.R compiles the _filled form file
+# when it exists (in preference to _cor and _standardized), so filled
+# positions reach the compiled sightings. Check the audit (gap sizes, rows
+# filled vs. left missing) after any change to the track or form times.
+#
+# The fill assumes form times are UTC, like the track. Years whose tablet
+# was on local time are shifted in 01_normalize_yearly_form_data.R first
+# (form_clock_offset_hours in scripts/lib/helpers.R); without that shift
+# the 2023 fills landed 6-37 km from the true positions.
 #
 # Example:
 #   Rscript scripts/05_backfill_missing_tarajoq_coordinates.R --year=2024

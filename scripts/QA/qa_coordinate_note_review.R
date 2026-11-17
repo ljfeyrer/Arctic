@@ -1,4 +1,9 @@
-#!/usr/bin/env Rscript
+# Author: Laura Joan Feyrer
+# Date created: 2026-11-17
+# Date updated: 2026-11-17
+# Description: TODO - describe what this script does
+#
+# !/usr/bin/env Rscript
 
 # Extract note text that may require coordinate review before compilation.
 # This is an audit only: it never changes normalized source tables.
@@ -21,7 +26,7 @@ files <- list.files(
 files <- files[
   grepl("/sightings/", files) &
     grepl("tarajoq_form_sightings_.*_standardized\\.csv$", files) &
-    !grepl("kiviuq", files, ignore.case = TRUE)
+    !grepl("naw", files, ignore.case = TRUE)
 ]
 
 note_columns <- c(
@@ -36,12 +41,16 @@ coordinate_terms <- regex(
 extract_file <- function(path) {
   data <- read_csv(path, col_types = cols(.default = col_character()), name_repair = "unique")
   available <- intersect(note_columns, names(data))
-  if (!length(available)) return(tibble())
+  if (!length(available)) {
+    return(tibble())
+  }
 
   note_table <- map_dfr(available, function(col) {
     value <- str_squish(data[[col]])
     keep <- !is.na(value) & value != "" & str_detect(value, coordinate_terms)
-    if (!any(keep)) return(tibble())
+    if (!any(keep)) {
+      return(tibble())
+    }
     tibble(
       source_file = normalizePath(path, winslash = "/", mustWork = FALSE),
       source_table = basename(path),

@@ -14,8 +14,11 @@ This is a specialized, Arctic-only branch of catalogue cleaning that is also don
 
 1. **00_clean_arctic_lv.R** - Step 1: cleaning, quality rating, encounter grouping
 2. **01_analyze_arctic_lv_resights.R** - Step 2: resighting and within-day association analysis
-3. **Arctic_NBW_PhotoID_Report.Rmd** - RMarkdown report with tables and maps
-4. **README_arctic_analysis.md** - This file
+3. **02_map_arctic_lv_sightings.R** - Saves one map of all catalogue photo locations to `output/FIGS/arctic_photoid_sightings_map.png`, without knitting the report
+4. **Arctic_NBW_PhotoID_Report.Rmd** - RMarkdown report with tables and maps
+5. **README.md** - This file
+
+The report and the map script draw on `scripts/lib/arctic_basemap.R` (bathymetry, marine refuges, EEZ, land on a fixed extent), which the single-panel field sightings map in `scripts/06_merge_annual_sightings.R` also uses, so the photo-ID and field sightings maps line up.
 
 Cleaning is split from the resight/association analysis so the catalogue can be re-cleaned (e.g. after a new LV export) without recomputing everything downstream by hand, and so the resight/association/mapping piece can move on its own if this analysis is ever relocated.
 

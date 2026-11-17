@@ -76,6 +76,32 @@ haversine_m <- function(lat1, lon1, lat2, lon2) {
   6371008.8 * 2 * atan2(sqrt(a), sqrt(1 - a))
 }
 
+# ---- CLOCK CORRECTIONS ------------------------------------------------------
+# Hours to add to Tarajoq form-tablet times to convert them to UTC, for years
+# when the tablet was set to local time. Checked against the ship track,
+# which is UTC (2023 photo GPS with explicit UTC offsets sits on it at +0 h):
+# 2023 Cetaceans workbook positions sit on the track only at +2 h (median
+# 0.0 km, 92% within 1 km), while 2022 and 2024-2026 form positions sit on it
+# at +0 h. The 2023 workbook's Local_Time column shares the 2023 tablet clock.
+form_clock_offset_hours <- c("2023" = 2)
+
+form_time_to_utc <- function(datetime, year) {
+  offset <- form_clock_offset_hours[as.character(year)]
+  if (is.na(offset)) {
+    return(datetime)
+  }
+  datetime + unname(offset) * 3600
+}
+
+# Text recorded alongside corrected times, or NA when no correction applies.
+form_clock_note <- function(year) {
+  offset <- form_clock_offset_hours[as.character(year)]
+  if (is.na(offset)) {
+    return(NA_character_)
+  }
+  sprintf("recorded time %+g h to UTC: form tablet was on local time", unname(offset))
+}
+
 # ---- COMPILED/DEDUPLICATED OUTPUT -------------------------------------------
 # Shared by the compile-style scripts (03_compile_normalized_tarajoq_sightings.R,
 # 06_merge_annual_sightings.R), which each compute a `dedup_group_id` and

@@ -2,9 +2,9 @@
 
 # Author: Laura Joan Feyrer
 # Date created: 2025-11-14
-# Date updated: 2026-11-16
+# Date updated: 2026-11-17
 # Description: Cross-reference the merged, within-vessel-deduplicated annual
-# NBW sightings (Tarajoq + Kiviuq, from 06_merge_annual_sightings.R) against
+# NBW sightings (Tarajoq + NAW, from 06_merge_annual_sightings.R) against
 # external reference databases -- the DFO national sightings database, the
 # Greenland NBW compilation, and the Paamiut all-NBW-observations table -- to
 # find sightings already present in those databases. Flags likely duplicates
@@ -18,7 +18,7 @@
 # or --year=YYYY for one year. Re-run any time a new year is merged or a
 # reference database is updated. Must run after 06_merge_annual_sightings.R
 # (which must itself run after 03_compile_normalized_tarajoq_sightings.R and
-# 02_normalize_kiviuq_sightings.R).
+# 02_normalize_naw_sightings.R).
 #
 # Inputs (never modified):
 #   output/Sightings/nbw_annual_sightings_<year>_{compiled_deduplicated,deduplicated}.csv

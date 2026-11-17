@@ -129,11 +129,7 @@ summarised them against that year's Leg 2 sightings file.
 
 - `output/Sightings_QA/biopsy_duplicate_sample_ids_2025.csv` -- real
   duplicate `Subsample_B_no` values in 2025, needs review (see above).
-- `scripts/05_backfill_missing_tarajoq_coordinates.R` produces `_filled.csv`
-  review files and a `coordinate_backfill_audit_<year>.csv` per year, but
-  `scripts/03_compile_normalized_tarajoq_sightings.R` still reads the
-  `_cor`/`_standardized` files, not `_filled`. Decide whether to extend the
-  compiler's file-preference cascade once the backfill audits have been
-  reviewed (gap sizes are 0 minutes for 2022/2023/2025/2026; 2024 has 5
-  filled sightings/4 environment records with gaps up to 10.4 minutes, and
-  8/3 left unfilled because the 2024 ship track ends Oct 31).
+- ~~Decide whether the compiler should use the `_filled` files.~~ Done
+  2026-11-17: `03_compile_normalized_tarajoq_sightings.R` now compiles the
+  `_filled` form file when present, after the 2023 form times were found to
+  be local time (UTC-2) and corrected in `01_normalize_yearly_form_data.R`.

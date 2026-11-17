@@ -2,10 +2,15 @@
 # Date created: 2026-11-16
 # Date updated: 2026-11-16
 # Description: Builds the shared Arctic basemap (bathymetry, DFO marine
-# refuges, Canadian EEZ, land, place names) used by the photo-ID report and
-# by 02_map_arctic_lv_sightings.R. Source it after loading ggplot2, sf,
-# terra, dplyr and here; it defines `arctic_basemap`, `arctic_extent`,
-# `xlims` and `ylims`. Add point layers, then `+ arctic_extent`.
+# refuges, Canadian EEZ, land, place names) on a fixed extent, so maps drawn
+# on it line up when shown side by side. Used by the photo-ID report
+# (scripts/photoid/), scripts/photoid/02_map_arctic_lv_sightings.R, and the
+# single-panel field sightings map in scripts/06_merge_annual_sightings.R.
+# Source it after loading ggplot2, sf, terra and dplyr; it defines
+# `arctic_basemap`, `arctic_extent`, `xlims` and `ylims`, plus helper
+# objects (bathy, eez, land, ...), so callers that already use those names
+# should source it with `local = TRUE`. Add point layers, then
+# `+ arctic_extent`.
 #
 # Basemap files are read from ARCTIC_BASEMAP_DIR (default ~/CODE/shapefiles),
 # which is outside this repository.
@@ -42,11 +47,11 @@ bathy_df <- as.data.frame(bathy, xy = TRUE) %>%
 eez <- st_read(eez_path, quiet = TRUE)
 # DFO marine refuges (OECMs) that intersect the map extent; drawn faintly
 # under the EEZ line. Skipped if the shapefile is not present.
-source(here("scripts", "lib", "helpers.R"))
+source(here::here("scripts", "lib", "helpers.R"))
 oecm_colour <- "#FFD400"
 oecm <- read_oecm_in_extent(
   xlims, ylims,
-  path = here("input", "basemaps", "DFO_OECM_MPO_AMCEZ_SHP", "DFO_OECM_MPO_AMCEZ.shp")
+  path = here::here("input", "basemaps", "DFO_OECM_MPO_AMCEZ_SHP", "DFO_OECM_MPO_AMCEZ.shp")
 )
 land <- st_read(land_path, quiet = TRUE) %>%
   filter(CONTINENT == "North America")
@@ -82,6 +87,12 @@ arctic_basemap <- ggplot() +
   theme(plot.margin = margin(0.1, 0.1, 0.1, 0.1, "cm"),
         panel.grid = element_blank(),
         legend.key = element_blank(),
+        # One white box around all legends (points and marine refuges)
+        # rather than a separate box per legend.
+        legend.background = element_blank(),
+        legend.box.background = element_rect(fill = "white", colour = "grey60", linewidth = 0.3),
+        legend.box.margin = margin(4, 6, 4, 6),
+        legend.spacing.y = unit(2, "pt"),
         legend.position = "inside",
         legend.position.inside = c(0.92, 0.97),
         legend.justification.inside = c(1, 1))

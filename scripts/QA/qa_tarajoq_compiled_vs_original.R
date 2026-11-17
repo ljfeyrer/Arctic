@@ -79,7 +79,13 @@ source <- raw %>%
     source_row = row_number() + 1L,
     source_datetime_field = datetime_field,
     source_datetime_raw = datetime_raw,
-    source_datetime = parse_datetime(source_datetime_raw),
+    # Local_Time in the 2023 workbook is on the 2023 tablet's local clock;
+    # shift it to UTC like the normalized form times it is compared with.
+    source_datetime = if (identical(datetime_field, "Local_Time")) {
+      form_time_to_utc(parse_datetime(source_datetime_raw), year)
+    } else {
+      parse_datetime(source_datetime_raw)
+    },
     source_date = as.Date(source_datetime),
     source_latitude = suppressWarnings(as.numeric(Latitude)),
     source_longitude = suppressWarnings(as.numeric(Longitude)),

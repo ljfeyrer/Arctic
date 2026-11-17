@@ -538,8 +538,8 @@ if (has_associations && nrow(associations) > 0) {
 # Spatial Analysis
 
 ```{r map-prep}
-# Shared with scripts/photoid/02_map_arctic_lv_sightings.R.
-source(here("scripts", "photoid", "arctic_basemap.R"))
+# Shared with 02_map_arctic_lv_sightings.R and the field sightings map.
+source(here("scripts", "lib", "arctic_basemap.R"))
 ```
 
 ## All Sightings (2017+)

@@ -91,6 +91,9 @@ normalize_cetaceans <- function(path) {
     for (field in names(datetime_candidates)) {
       candidate <- datetime_candidates[[field]]
       parsed <- parse_datetime(candidate)
+      # Local_Time is on the form tablet's clock; shift it to UTC for years
+      # where that clock was local (form_clock_offset_hours, helpers.R).
+      if (field == "Local_Time") parsed <- form_time_to_utc(parsed, year)
       use <- is.na(datetime) & !is.na(parsed)
       datetime[use] <- parsed[use]
       datetime_field[use] <- field

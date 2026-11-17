@@ -1,11 +1,11 @@
 # Author: Laura Joan Feyrer
 # Date created: 2026-11-16
-# Date updated: 2026-11-16
+# Date updated: 2026-11-17
 # Description: TODO - describe what this script does
 #
 # !/usr/bin/env Rscript
 
-# Normalize heterogeneous Kiviuq Arctic_<year>.xlsx sightings sheets.
+# Normalize heterogeneous NAW (New Arctic Whales) Arctic_<year>.xlsx sightings sheets.
 # Outputs are separate from Tarajoq form sightings so the source programs are
 # not silently mixed.
 
@@ -93,8 +93,8 @@ normalize_file <- function(path) {
   count_num[rowSums(!is.na(cbind(adult, juvenile, calf))) == 0 & is.na(as_num(count))] <- NA_real_
 
   tibble(
-    record_id = paste0(year, "_kiviuq_", seq_len(nrow(raw))),
-    source_family = "Kiviuq",
+    record_id = paste0(year, "_naw_", seq_len(nrow(raw))),
+    source_family = "NAW",
     source_year = year,
     survey_leg = NA_character_,
     standard_datetime = datetime,
@@ -109,7 +109,7 @@ normalize_file <- function(path) {
     source_file = basename(path),
     source_sheet = "Sheet1",
     source_row = seq_len(nrow(raw)) + 1L,
-    coordinate_source = "Kiviuq source sheet",
+    coordinate_source = "NAW source sheet",
     comments = get_col(raw, c("comments", "Comments", "Notes"))
   )
 }
@@ -117,21 +117,21 @@ normalize_file <- function(path) {
 # Hand-transcribed raw field notes (e.g. a text message or note received
 # before any spreadsheet export exists for that year) live alongside the
 # normalized sightings at
-# input/normalized/<year>/sightings/kiviuq_fieldnotes_<year>_transcription.csv
+# input/normalized/<year>/sightings/naw_fieldnotes_<year>_transcription.csv
 # with columns note_row, date_raw, standard_date, latitude_raw,
 # longitude_raw, latitude, longitude, count, notes, source_file. They are
 # combined into the same per-year output as the Arctic_<year>.xlsx sheets,
 # with coordinate_source flagged as approximate (hand-estimated positions,
 # not a logged GPS fix).
 read_fieldnote_transcription <- function(year) {
-  path <- file.path(out_root, year, "sightings", paste0("kiviuq_fieldnotes_", year, "_transcription.csv"))
+  path <- file.path(out_root, year, "sightings", paste0("naw_fieldnotes_", year, "_transcription.csv"))
   if (!file.exists(path)) {
     return(tibble())
   }
   raw <- read_csv(path, col_types = cols(.default = col_character()), show_col_types = FALSE)
   tibble(
-    record_id = paste0(year, "_kiviuq_fieldnote_", raw$note_row),
-    source_family = "Kiviuq",
+    record_id = paste0(year, "_naw_fieldnote_", raw$note_row),
+    source_family = "NAW",
     source_year = as.integer(year),
     survey_leg = NA_character_,
     standard_datetime = as.POSIXct(NA_real_, tz = "UTC"),
@@ -157,19 +157,19 @@ xlsx_files <- list.files(root,
   pattern = "^Arctic_[0-9]{4}[.]xlsx$", recursive = TRUE,
   full.names = TRUE, ignore.case = TRUE
 )
-# Most years file this under kiviuq/cetacean_sightings/, but 2023's workbook
-# sits directly under kiviuq/ instead -- match on the unambiguous
-# Arctic_<year>.xlsx filename and just require a /kiviuq/ ancestor folder, so
+# Most years file this under naw/cetacean_sightings/, but 2023's workbook
+# sits directly under naw/ instead -- match on the unambiguous
+# Arctic_<year>.xlsx filename and just require a /naw/ ancestor folder, so
 # that inconsistency doesn't silently drop a year.
-xlsx_files <- xlsx_files[str_detect(xlsx_files, "/kiviuq/")]
+xlsx_files <- xlsx_files[str_detect(xlsx_files, "/naw/")]
 xlsx_years <- str_extract(basename(xlsx_files), "[0-9]{4}")
 
 fieldnote_years <- list.dirs(root, recursive = FALSE, full.names = FALSE) %>%
   str_subset("^[0-9]{4}$") %>%
-  keep(~ file.exists(file.path(out_root, .x, "sightings", paste0("kiviuq_fieldnotes_", .x, "_transcription.csv"))))
+  keep(~ file.exists(file.path(out_root, .x, "sightings", paste0("naw_fieldnotes_", .x, "_transcription.csv"))))
 
 years <- sort(union(xlsx_years, fieldnote_years))
-if (length(years) == 0) stop("No Kiviuq Arctic_<year>.xlsx files or field-note transcriptions found")
+if (length(years) == 0) stop("No NAW Arctic_<year>.xlsx files or field-note transcriptions found")
 
 for (year in years) {
   xlsx_path <- xlsx_files[xlsx_years == year]
@@ -179,7 +179,7 @@ for (year in years) {
   )
   out_dir <- file.path(out_root, year, "sightings")
   dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
-  out_file <- file.path(out_dir, paste0("kiviuq_sightings_", year, "_standardized.csv"))
+  out_file <- file.path(out_dir, paste0("naw_sightings_", year, "_standardized.csv"))
   write_csv(data, out_file, na = "")
-  message(year, ": ", nrow(data), " Kiviuq rows -> ", out_file)
+  message(year, ": ", nrow(data), " NAW rows -> ", out_file)
 }

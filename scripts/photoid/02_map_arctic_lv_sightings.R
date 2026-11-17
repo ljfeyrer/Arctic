@@ -15,7 +15,7 @@
 
 pacman::p_load(dplyr, here, ggplot2, sf, terra)
 
-source(here("scripts", "photoid", "arctic_basemap.R"))
+source(here("scripts", "lib", "arctic_basemap.R"))
 
 sightings_file <- here("OUTPUT", "PhotoID", "LV_ARC_reliable.rds")
 if (!file.exists(sightings_file)) {
@@ -29,7 +29,7 @@ photo_points <- readRDS(sightings_file) %>%
 sightings_map <- arctic_basemap +
   geom_sf(
     data = st_jitter(photo_points, factor = 0.005),
-    aes(colour = "Photo-ID sightings"), shape = 18, size = 2, alpha = 0.6
+    aes(colour = "Photo-ID sightings"), shape = 18, size = 2, alpha = 0.5
   ) +
   scale_colour_manual(
     values = c("Photo-ID sightings" = "#D55E00"), name = NULL,

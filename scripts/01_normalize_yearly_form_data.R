@@ -17,6 +17,11 @@
 # The original workbooks and deduplicated source CSVs are never modified.
 # Missing values remain missing. Coordinate corrections are applied separately
 # by scripts/04_correct_tarajoq_form_coordinates.R.
+#
+# standard_datetime is UTC. Years whose form tablet was on local time are
+# shifted using form_clock_offset_hours in scripts/lib/helpers.R (currently
+# 2023, +2 h); datetime_raw keeps the time as recorded and
+# datetime_clock_correction says when a shift was applied.
 
 suppressPackageStartupMessages({
   library(dplyr)
@@ -112,7 +117,7 @@ normalize_sightings <- function(data, year) {
   end_raw <- get_col(data, c("TimeEnd", "END encounter", "Local_Time_End"))
   pos <- parse_position(get_col(data, c("StartPos", "Pos")))
   end_pos <- parse_position(get_col(data, "EndPos"))
-  dt <- parse_datetime(start_raw)
+  dt <- form_time_to_utc(parse_datetime(start_raw), year)
 
   normalized <- bind_cols(
     tibble(
@@ -121,6 +126,7 @@ normalize_sightings <- function(data, year) {
       standard_date = as.Date(dt),
       standard_time = format(dt, "%H:%M:%S", tz = "UTC"),
       datetime_raw = start_raw,
+      datetime_clock_correction = form_clock_note(year),
       latitude = pos$latitude,
       longitude = pos$longitude,
       latitude_end = end_pos$latitude,
@@ -155,7 +161,7 @@ normalize_environment <- function(data, year) {
   start_raw <- get_col(data, c("DateT", "Date_Time"))
   end_raw <- get_col(data, c("TimeEnd", "END encounter"))
   pos <- parse_position(get_col(data, c("StartPos", "Pos")))
-  dt <- parse_datetime(start_raw)
+  dt <- form_time_to_utc(parse_datetime(start_raw), year)
 
   bind_cols(
     tibble(
@@ -164,6 +170,7 @@ normalize_environment <- function(data, year) {
       standard_date = as.Date(dt),
       standard_time = format(dt, "%H:%M:%S", tz = "UTC"),
       datetime_raw = start_raw,
+      datetime_clock_correction = form_clock_note(year),
       latitude = pos$latitude,
       longitude = pos$longitude,
       time_end_raw = end_raw,
@@ -187,7 +194,7 @@ normalize_environment <- function(data, year) {
 normalize_biopsy <- function(data, year) {
   start_raw <- get_col(data, c("Biopsy_start", "Biopsy_Time", "DateT"))
   pos <- parse_position(get_col(data, c("StartPos", "Pos")))
-  dt <- parse_datetime(start_raw)
+  dt <- form_time_to_utc(parse_datetime(start_raw), year)
 
   # Older biopsy exports (2024 and earlier) record the subsample id under
   # Sample_no and the outcome as free text under Sample_success rather than
@@ -213,6 +220,7 @@ normalize_biopsy <- function(data, year) {
       standard_date = as.Date(dt),
       standard_time = format(dt, "%H:%M:%S", tz = "UTC"),
       datetime_raw = start_raw,
+      datetime_clock_correction = form_clock_note(year),
       latitude = as_num(get_col(data, "Latitude")),
       longitude = as_num(get_col(data, "Longitude")),
       latitude_from_position = pos$latitude,
