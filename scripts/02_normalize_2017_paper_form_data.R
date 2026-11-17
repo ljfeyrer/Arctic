@@ -144,6 +144,7 @@ sightings <- tibble(
   source_row = cetaceans$source_row,
   coordinate_source = if_else(!is.na(latitude) & !is.na(longitude), "2017 paper form (transcribed)", NA_character_),
   coordinate_use = NA_character_,
+  coordinate_fill_method = NA_character_,
   comments = collapse_comment(
     vessel_note,
     if_else(na_text(cetaceans$SPP_CER) == "3", "species certainty: maybe/unsure", NA_character_),
